@@ -1,0 +1,2479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Size Report</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif; background: #f5f5f5; padding: 20px; line-height: 1.6; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        header { background: linear-gradient(135deg, #063773 0%, #0a5aa8 100%); color: white; padding: 30px; }
+        header h1 { font-size: 32px; margin-bottom: 10px; }
+        
+        /* Tabs */
+        .tabs { display: flex; background: #f8f9fa; border-bottom: 2px solid #e0e0e0; }
+        .tab { padding: 15px 30px; cursor: pointer; font-weight: 600; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; }
+        .tab:hover { color: #063773; background: rgba(6, 55, 115, 0.05); }
+        .tab.active { color: #063773; border-bottom-color: #063773; background: white; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; padding: 30px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0; }
+        .summary-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .summary-card h3 { font-size: 14px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .summary-card .value { font-size: 28px; font-weight: bold; color: #333; }
+        .summary-card .label { font-size: 11px; color: #999; margin-top: 5px; }
+        .summary-card .internal-info { font-size: 12px; color: #9b59b6; margin-top: 8px; font-weight: 600; }
+        
+        .controls { padding: 20px 30px; background: white; border-bottom: 1px solid #e0e0e0; display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+        .controls input { padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; flex: 1; min-width: 200px; }
+        .controls select { padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer; }
+        
+        /* Filter Chips */
+        .filter-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+        .filter-chip { padding: 8px 16px; border: 2px solid #e0e0e0; border-radius: 20px; font-size: 13px; font-weight: 600; color: #666; background: white; cursor: pointer; transition: all 0.2s; user-select: none; }
+        .filter-chip:hover { border-color: #063773; color: #063773; background: #f0f6ff; }
+        .filter-chip.active { background: linear-gradient(135deg, #063773 0%, #0a5aa8 100%); color: white; border-color: #063773; }
+        .filter-chip.active:hover { background: linear-gradient(135deg, #0a5aa8 0%, #063773 100%); }
+        
+        .modules-grid { padding: 30px; }
+        .module-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 16px; overflow: hidden; transition: all 0.2s ease; }
+        .module-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-color: #063773; }
+        .module-header { padding: 18px 24px; background: #fafafa; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; transition: background 0.15s ease; }
+        .module-header:hover { background: #f5f6fa; }
+        .module-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .module-name-row { font-size: 16px; font-weight: 600; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .module-version { color: #063773; }
+        .owner-badge { display: inline-flex; align-items: center; padding: 4px 10px; background: linear-gradient(135deg, #063773 0%, #0a5aa8 100%); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(6, 55, 115, 0.2); flex-shrink: 0; }
+        .internal-badge { display: inline-flex; align-items: center; padding: 4px 10px; background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(155, 89, 182, 0.2); flex-shrink: 0; }
+        .module-stats { display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
+        .module-stat { display: flex; flex-direction: column; align-items: flex-end; }
+        .module-stat-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
+        .module-stat-value { font-size: 14px; color: #063773; font-weight: 700; white-space: nowrap; }
+        .module-size { font-size: 16px; color: #063773; font-weight: 700; white-space: nowrap; }
+        .expand-icon { color: #063773; font-size: 12px; transition: transform 0.2s; }
+        .expand-icon.open { transform: rotate(180deg); }
+        
+        .module-details { padding: 20px 24px; display: none; background: #fafafa; }
+        .module-details.open { display: block; }
+        
+        .size-bars { margin-bottom: 30px; }
+        .size-bar { margin-bottom: 15px; }
+        .size-bar-label { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+        .size-bar-label .name { color: #333; font-weight: 500; }
+        .size-bar-label .value { color: #666; }
+        .size-bar-fill { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+        .size-bar-progress { height: 100%; background: linear-gradient(90deg, #063773 0%, #0a5aa8 100%); transition: width 0.3s; }
+        
+        .resources-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .resource-card { background: white; padding: 15px; border-radius: 6px; border: 1px solid #e0e0e0; }
+        .resource-type { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .resource-size { font-size: 18px; font-weight: bold; color: #333; }
+        .resource-count { font-size: 12px; color: #999; }
+        
+        .files-section { margin-top: 30px; }
+        .files-section h4 { font-size: 16px; margin-bottom: 15px; color: #333; display: flex; align-items: center; gap: 10px; }
+        .files-section h4 .count-badge { background: #063773; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .files-table { width: 100%; background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0; }
+        .files-table-header { display: grid; grid-template-columns: 1fr auto; gap: 15px; padding: 12px 15px; background: #f8f9fa; font-weight: 600; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e0e0e0; }
+        .file-row { display: grid; grid-template-columns: 1fr auto; gap: 15px; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; transition: background 0.15s; align-items: center; }
+        .file-row:last-child { border-bottom: none; }
+        .file-row:hover { background: #f8f9fa; }
+        .file-name { color: #2d3748; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+        .file-size { color: #063773; font-weight: 600; font-size: 13px; text-align: right; white-space: nowrap; }
+        
+        .top-files { margin-top: 20px; }
+        .top-files h4 { font-size: 16px; margin-bottom: 15px; color: #333; }
+        .file-item { display: flex; justify-content: space-between; padding: 10px; background: white; margin-bottom: 5px; border-radius: 4px; font-size: 13px; border-left: 4px solid #e0e0e0; transition: all 0.2s; }
+        .file-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .file-path { color: #666; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif; }
+        .file-size-value { color: #333; font-weight: 500; margin-left: 15px; }
+        .file-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-right: 8px; }
+        
+        /* File type colors */
+        .file-type-image { border-left-color: #3498db; }
+        .file-type-image .file-type-badge { background: #e3f2fd; color: #1976d2; }
+        
+        .file-type-lottie { border-left-color: #9b59b6; }
+        .file-type-lottie .file-type-badge { background: #f3e5f5; color: #7b1fa2; }
+        
+        .file-type-pdf { border-left-color: #e74c3c; }
+        .file-type-pdf .file-type-badge { background: #ffebee; color: #c62828; }
+        
+        .file-type-video { border-left-color: #e67e22; }
+        .file-type-video .file-type-badge { background: #fff3e0; color: #e65100; }
+        
+        .file-type-audio { border-left-color: #1abc9c; }
+        .file-type-audio .file-type-badge { background: #e0f2f1; color: #00695c; }
+        
+        .file-type-font { border-left-color: #34495e; }
+        .file-type-font .file-type-badge { background: #eceff1; color: #37474f; }
+        
+        .file-type-other { border-left-color: #95a5a6; }
+        .file-type-other .file-type-badge { background: #f5f5f5; color: #616161; }
+        
+        .no-results { text-align: center; padding: 60px 20px; color: #999; font-size: 16px; }
+        .no-data { padding: 15px; color: #999; font-style: italic; text-align: center; }
+        
+        /* D3 Chart Styles */
+        .d3-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .d3-tooltip.visible { opacity: 1; }
+        .d3-tooltip-owner { font-weight: bold; margin-bottom: 6px; font-size: 14px; }
+        .d3-tooltip-row { margin: 3px 0; display: flex; align-items: center; gap: 8px; }
+        .d3-tooltip-color { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+        .ownership-chart-container { position: relative; width: 100%; overflow-x: auto; }
+        .axis text { font-size: 12px; fill: #666; }
+        .axis line, .axis path { stroke: #e0e0e0; }
+        .grid line { stroke: #e0e0e0; stroke-dasharray: 3,3; }
+        .bar { cursor: pointer; transition: opacity 0.2s; }
+        .bar:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="headerTitle">📱 App Size Report</h1>
+            <p id="headerSubtitle">Detailed analysis of app module sizes and resources</p>
+        </header>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('breakdown')">Breakdown</div>
+            <div class="tab" onclick="switchTab('insights')">Insights</div>
+            <div class="tab" onclick="switchTab('ownership')">Ownership</div>
+        </div>
+        
+        <!-- Breakdown Tab -->
+        <div id="breakdown" class="tab-content active">
+            <div class="summary" id="summary"></div>
+            <div class="controls">
+                <input type="text" id="searchInput" placeholder="Search modules..." />
+                <div class="filter-chips">
+                    <div class="filter-chip active" data-filter="internal" onclick="toggleBreakdownFilter('internal')">Internal</div>
+                    <div class="filter-chip active" data-filter="external" onclick="toggleBreakdownFilter('external')">External</div>
+                    <div class="filter-chip active" data-filter="owned" onclick="toggleBreakdownFilter('owned')">Owned</div>
+                    <div class="filter-chip active" data-filter="unowned" onclick="toggleBreakdownFilter('unowned')">Unowned</div>
+                </div>
+                <select id="sortSelect">
+                    <option value="downloadSize">Sort by: Download Size</option>
+                    <option value="installSize">Sort by: Install Size</option>
+                    <option value="name">Sort by: Name</option>
+                </select>
+            </div>
+            <div class="modules-grid" id="modulesGrid"></div>
+        </div>
+        
+        <!-- Insights Tab -->
+        <div id="insights" class="tab-content">
+            <!-- Filter Controls -->
+            <div style="padding: 20px 30px; background: white; border-bottom: 1px solid #e0e0e0;">
+                <div class="filter-chips">
+                    <div class="filter-chip active" data-filter="internal" onclick="toggleInsightsFilter('internal')">Internal</div>
+                    <div class="filter-chip active" data-filter="external" onclick="toggleInsightsFilter('external')">External</div>
+                </div>
+            </div>
+            
+            <!-- Top Offenders Dashboard -->
+            <div style="padding: 30px; background: white; border-bottom: 1px solid #e0e0e0;">
+                <h2 style="font-size: 20px; color: #333; margin-bottom: 20px;">🔥 Top Offenders</h2>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px;">
+                    <div style="min-width: 0; overflow: hidden;">
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Modules</h3>
+                        <div id="topModulesChart"></div>
+                    </div>
+                    <div style="min-width: 0; overflow: hidden;">
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Source Files</h3>
+                        <div id="topFilesChart"></div>
+                    </div>
+                    <div style="min-width: 0; overflow: hidden;">
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Asset Files</h3>
+                        <div id="topAssetsChart"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Treemap Visualization -->
+            <div style="padding: 30px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">
+                <h2 style="font-size: 20px; color: #333; margin-bottom: 10px;">🗺️ App Size Treemap</h2>
+                <p style="color: #666; font-size: 14px; margin-bottom: 20px;">Interactive visualization of all modules sized proportionally. Click to explore.</p>
+                <div id="treemapChart" style="background: white; border-radius: 8px; overflow: hidden;"></div>
+            </div>
+            
+            <!-- Resource Type Breakdown -->
+            <div style="padding: 30px; background: white; border-bottom: 1px solid #e0e0e0;">
+                <h2 style="font-size: 20px; color: #333; margin-bottom: 20px;">📦 Resource Type Breakdown</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; justify-items: center;">
+                    <div style="width: 100%; max-width: 400px;">
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px; text-align: center;">By Count</h3>
+                        <div id="resourceCountChart"></div>
+                    </div>
+                    <div style="width: 100%; max-width: 400px;">
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px; text-align: center;">By Size (Install Size)</h3>
+                        <div id="resourceSizeChart"></div>
+                    </div>
+                </div>
+                <div id="resourceLegend" style="margin-top: 30px; display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;"></div>
+            </div>
+            
+            <!-- User Impact Score -->
+            <div style="padding: 30px; background: #f8f9fa;">
+                <h2 style="font-size: 20px; color: #333; margin-bottom: 20px;">👤 User Impact</h2>
+                <div id="userImpactSection"></div>
+            </div>
+        </div>
+        
+        <!-- Ownership Tab -->
+        <div id="ownership" class="tab-content">
+            <div style="padding: 30px; background: white;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; flex-wrap: wrap; gap: 20px;">
+                    <div>
+                        <h2 style="font-size: 20px; color: #333; margin-bottom: 10px;">Ownership overview</h2>
+                        <p style="color: #666; font-size: 14px;">Shows how much of the overall app size is owned by each owner.</p>
+                    </div>
+                    <div style="display: flex; gap: 15px; align-items: center;">
+                        <div class="filter-chips">
+                            <div class="filter-chip active" data-filter="internal" onclick="toggleOwnershipFilter('internal')">Internal</div>
+                            <div class="filter-chip active" data-filter="external" onclick="toggleOwnershipFilter('external')">External</div>
+                        </div>
+                        <select id="ownershipSortSelect" style="padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;">
+                            <option value="downloadSize">Sort by: Download Size</option>
+                            <option value="installSize">Sort by: Install Size</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="ownership-chart-container">
+                    <div id="ownershipChart"></div>
+                </div>
+            </div>
+            <div style="padding: 30px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
+                <h2 style="font-size: 20px; color: #333; margin-bottom: 20px;">Components and files grouped by owner</h2>
+                <select id="ownerDropdown" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;">
+                    <option value="">Select an owner...</option>
+                </select>
+            </div>
+            <div id="ownerDetailSection" style="display: none;">
+                <div id="ownerDetailSummary" style="padding: 30px; background: white; border-top: 1px solid #e0e0e0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 30px;"></div>
+                <div style="padding: 0 30px 30px 30px; background: white;">
+                    <div class="modules-grid" id="ownerModulesGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const data = {
+  "appInfo" : {
+    "appModuleName" : "CaliperSampleApp",
+    "appName" : "CaliperSampleApp",
+    "buildNumber" : "1",
+    "bundleIdentifier" : "com.caliper.sample",
+    "version" : "1.0"
+  },
+  "modules" : {
+    "CaliperSampleApp" : {
+      "binarySize" : 22892,
+      "files" : [
+        {
+          "fileName" : "AppDelegate",
+          "size" : 15448,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ViewController",
+          "size" : 6268,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Orchard",
+          "size" : 340,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Hashable",
+          "size" : 248,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "UIApplicationLaunchOptionsKey",
+          "size" : 208,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Equatable",
+          "size" : 132,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RawRepresentable",
+          "size" : 108,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "NSLayoutConstraint",
+          "size" : 76,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "String",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 24,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "internal" : true,
+      "name" : "CaliperSampleApp",
+      "owner" : "App",
+      "proguard" : 205095,
+      "resources" : {
+        "plist" : {
+          "count" : 1,
+          "size" : 756
+        }
+      },
+      "top" : {
+        "Payload\/CaliperSampleApp.app\/" : 0,
+        "Payload\/CaliperSampleApp.app\/Info.plist" : 756,
+        "Payload\/CaliperSampleApp.app\/PkgInfo" : 8
+      }
+    },
+    "Foundation.tbd" : {
+      "binarySize" : 440,
+      "files" : [
+        {
+          "fileName" : "String",
+          "size" : 140,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Date",
+          "size" : 80,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "StringProtocol",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Array",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Dictionary",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "_NSRange",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Data",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Range< where A == Swift",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "_convertNSErrorToError",
+          "size" : 20,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "Foundation.tbd",
+      "proguard" : 440,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "Orchard" : {
+      "binarySize" : 27819,
+      "files" : [
+        {
+          "fileName" : "ConsoleLogger",
+          "size" : 6924,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "NSThread",
+          "size" : 2696,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ConsoleLoggerConfig",
+          "size" : 1400,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "paddedToString",
+          "size" : 436,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "demangle",
+          "size" : 352,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "NSRegularExpression",
+          "size" : 228,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Hashable",
+          "size" : 216,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RawRepresentable",
+          "size" : 216,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "demangleSymbol",
+          "size" : 172,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "cDemangle",
+          "size" : 152,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RTLD_DEFAULT",
+          "size" : 116,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "HasApply",
+          "size" : 100,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Decodable",
+          "size" : 92,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "String",
+          "size" : 80,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Comparable",
+          "size" : 80,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Encodable",
+          "size" : 76,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Data",
+          "size" : 64,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "AssociatedConformance<Orchard>",
+          "size" : 16,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "OptionSet",
+          "size" : 16,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "SetAlgebra",
+          "size" : 12,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Equatable",
+          "size" : 12,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 8,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "internal" : true,
+      "name" : "Orchard",
+      "owner" : "App",
+      "proguard" : 27819,
+      "resources" : {
+
+      },
+      "top" : {
+
+      },
+      "version" : "1.0.8"
+    },
+    "UIFoundation" : {
+      "binarySize" : 16,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "UIFoundation",
+      "proguard" : 16,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "UIKitCore" : {
+      "binarySize" : 20,
+      "files" : [
+        {
+          "fileName" : "UIApplicationMain",
+          "size" : 20,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "UIKitCore",
+      "proguard" : 20,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libc++.tbd" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libc++.tbd",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libclang_rt.ios(os_version_check.c)" : {
+      "binarySize" : 1901,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libclang_rt.ios(os_version_check.c)",
+      "proguard" : 1901,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libcompiler_rt.dylib" : {
+      "binarySize" : 8,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libcompiler_rt.dylib",
+      "proguard" : 8,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libdispatch.dylib" : {
+      "binarySize" : 60,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libdispatch.dylib",
+      "proguard" : 60,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libdyld.dylib" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libdyld.dylib",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libobjc.tbd" : {
+      "binarySize" : 160,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libobjc.tbd",
+      "proguard" : 160,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Actor.cpp)" : {
+      "binarySize" : 743,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Actor.cpp)",
+      "proguard" : 743,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Error.cpp)" : {
+      "binarySize" : 12,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Error.cpp)",
+      "proguard" : 12,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Exclusivity.cpp)" : {
+      "binarySize" : 389,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Exclusivity.cpp)",
+      "proguard" : 389,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(MutexPThread.cpp)" : {
+      "binarySize" : 2592,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(MutexPThread.cpp)",
+      "proguard" : 2592,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Overrides.cpp)" : {
+      "binarySize" : 577,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Overrides.cpp)",
+      "proguard" : 577,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Task.cpp)" : {
+      "binarySize" : 1284,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Task.cpp)",
+      "proguard" : 1284,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(TaskStatus.cpp)" : {
+      "binarySize" : 1128,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(TaskStatus.cpp)",
+      "proguard" : 1128,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(ThreadSanitizer.cpp)" : {
+      "binarySize" : 350,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(ThreadSanitizer.cpp)",
+      "proguard" : 350,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCore.tbd" : {
+      "binarySize" : 1300,
+      "files" : [
+        {
+          "fileName" : "String",
+          "size" : 156,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RawRepresentable< where A: Swift",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Hasher",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CommandLine",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "print",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Character",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "_SwiftNewtypeWrapper< where A: Swift",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "DefaultStringInterpolation",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 20,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCore.tbd",
+      "proguard" : 1300,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_c.dylib" : {
+      "binarySize" : 248,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_c.dylib",
+      "proguard" : 248,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_malloc.dylib" : {
+      "binarySize" : 60,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_malloc.dylib",
+      "proguard" : 60,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_platform.dylib" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_platform.dylib",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_pthread.dylib" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_pthread.dylib",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libxpc.dylib" : {
+      "binarySize" : 20,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libxpc.dylib",
+      "proguard" : 20,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "linker synthesized" : {
+      "binarySize" : 1860,
+      "files" : [
+        {
+          "fileName" : "ConsoleLoggerConfig",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Orchard",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ConsoleLogger",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "String",
+          "size" : 0,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "linker synthesized",
+      "proguard" : 1860,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    }
+  },
+  "totalInstallSize" : 205351,
+  "totalPackageSize" : 49071
+};
+        let currentTab = 'breakdown';
+        let currentSort = 'downloadSize';
+        let breakdownFilters = { internal: true, external: true, owned: true, unowned: true };
+        let insightsFilters = { internal: true, external: true };
+        let ownershipFilters = { internal: true, external: true };
+        
+        // Update header with app info if available
+        function updateHeader() {
+            if (data.appInfo) {
+                const appInfo = data.appInfo;
+                let title = '📱 ';
+                let subtitle = 'Detailed analysis of app module sizes and resources';
+                
+                if (appInfo.appName) {
+                    title += appInfo.appName;
+                } else {
+                    title += 'App Size Report';
+                }
+                
+                const subtitleParts = [];
+                if (appInfo.version) {
+                    subtitleParts.push('Version ' + appInfo.version);
+                }
+                if (appInfo.bundleIdentifier) {
+                    subtitleParts.push(appInfo.bundleIdentifier);
+                }
+                
+                if (subtitleParts.length > 0) {
+                    subtitle = subtitleParts.join(' • ');
+                }
+                
+                document.getElementById('headerTitle').textContent = title;
+                document.getElementById('headerSubtitle').textContent = subtitle;
+            }
+        }
+        
+        function switchTab(tabName) {
+            currentTab = tabName;
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Filter functions
+        function toggleBreakdownFilter(filter) {
+            breakdownFilters[filter] = !breakdownFilters[filter];
+            document.querySelectorAll('#breakdown .filter-chip').forEach(chip => {
+                if (chip.dataset.filter === filter) {
+                    chip.classList.toggle('active', breakdownFilters[filter]);
+                }
+            });
+            renderModules(document.getElementById('searchInput').value, currentSort);
+        }
+        
+        function toggleInsightsFilter(filter) {
+            insightsFilters[filter] = !insightsFilters[filter];
+            document.querySelectorAll('#insights .filter-chip').forEach(chip => {
+                if (chip.dataset.filter === filter) {
+                    chip.classList.toggle('active', insightsFilters[filter]);
+                }
+            });
+            renderInsights();
+        }
+        
+        function toggleOwnershipFilter(filter) {
+            ownershipFilters[filter] = !ownershipFilters[filter];
+            document.querySelectorAll('#ownership .filter-chip').forEach(chip => {
+                if (chip.dataset.filter === filter) {
+                    chip.classList.toggle('active', ownershipFilters[filter]);
+                }
+            });
+            ownershipData = prepareOwnershipData(currentOwnershipSort);
+            renderOwnershipChart();
+            populateOwnerDropdown();
+            // Reset detail view
+            document.getElementById('ownerDropdown').value = '';
+            document.getElementById('ownerDetailSection').style.display = 'none';
+        }
+        
+        function moduleMatchesBreakdownFilters(module) {
+            // Check internal/external filter
+            const isInternal = module.internal === true;
+            const internalMatch = (isInternal && breakdownFilters.internal) || (!isInternal && breakdownFilters.external);
+            if (!internalMatch) return false;
+            
+            // Check owned/unowned filter
+            const isOwned = module.owner && module.owner.toLowerCase() !== 'others';
+            const ownedMatch = (isOwned && breakdownFilters.owned) || (!isOwned && breakdownFilters.unowned);
+            if (!ownedMatch) return false;
+            
+            return true;
+        }
+        
+        function moduleMatchesInsightsFilters(module) {
+            const isInternal = module.internal === true;
+            return (isInternal && insightsFilters.internal) || (!isInternal && insightsFilters.external);
+        }
+        
+        function moduleMatchesOwnershipFilters(module) {
+            const isInternal = module.internal === true;
+            return (isInternal && ownershipFilters.internal) || (!isInternal && ownershipFilters.external);
+        }
+        
+        function getFileTypeInfo(filePath) {
+            const ext = filePath.split('.').pop().toLowerCase();
+            
+            // Image files
+            if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'heic', 'heif', 'webp', 'bmp', 'tiff', 'tif'].includes(ext)) {
+                return { type: 'image', label: ext.toUpperCase(), class: 'file-type-image' };
+            }
+            
+            // Lottie/JSON files (check if JSON is likely an animation)
+            if (ext === 'json') {
+                // Assume JSON files in asset catalogs are likely Lottie animations
+                if (filePath.toLowerCase().includes('lottie') || filePath.toLowerCase().includes('animation')) {
+                    return { type: 'lottie', label: 'LOTTIE', class: 'file-type-lottie' };
+                }
+                return { type: 'lottie', label: 'JSON', class: 'file-type-lottie' };
+            }
+            
+            // PDF files
+            if (ext === 'pdf') {
+                return { type: 'pdf', label: 'PDF', class: 'file-type-pdf' };
+            }
+            
+            // Video files
+            if (['mp4', 'mov', 'avi', 'mkv', 'm4v', 'mpg', 'mpeg', 'wmv', 'webm'].includes(ext)) {
+                return { type: 'video', label: ext.toUpperCase(), class: 'file-type-video' };
+            }
+            
+            // Audio files
+            if (['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'aiff', 'wma'].includes(ext)) {
+                return { type: 'audio', label: ext.toUpperCase(), class: 'file-type-audio' };
+            }
+            
+            // Font files
+            if (['ttf', 'otf', 'woff', 'woff2', 'eot'].includes(ext)) {
+                return { type: 'font', label: ext.toUpperCase(), class: 'file-type-font' };
+            }
+            
+            // Other files
+            return { type: 'other', label: ext.toUpperCase(), class: 'file-type-other' };
+        }
+        
+        function calculateModuleTotal(module) {
+            let total = 0;
+            
+            // Add binary size
+            total += module.binarySize || 0;
+            
+            // Add image file size
+            total += module.imageFileSize || 0;
+            
+            // Add all resource sizes
+            if (module.resources) {
+                Object.values(module.resources).forEach(res => {
+                    total += res.size || 0;
+                });
+            }
+            
+            return total;
+        }
+        
+        function renderSummary() {
+            const totalPackageSize = data.totalPackageSize || 0;
+            const totalInstallSize = data.totalInstallSize || 0;
+            const allModules = Object.values(data.modules);
+            const moduleCount = allModules.length;
+            const totalBinarySize = allModules.reduce((sum, m) => sum + (m.binarySize || 0), 0);
+            
+            // Calculate internal totals
+            const internalModules = allModules.filter(m => m.internal === true);
+            const internalCount = internalModules.length;
+            const internalBinarySize = internalModules.reduce((sum, m) => sum + (m.binarySize || 0), 0);
+            const internalInstallSize = internalModules.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
+            
+            // Internal download size is the sum of binary sizes for internal modules
+            // (Download size for a module = its binarySize, which is the compressed executable code)
+            const internalDownloadSize = internalBinarySize;
+            
+            document.getElementById('summary').innerHTML = `
+                <div class="summary-card">
+                    <h3>Download Size</h3>
+                    <div class="value">${formatBytes(totalPackageSize)}</div>
+                    <div class="label">Compressed IPA</div>
+                    ${internalCount > 0 ? `<div class="internal-info">Internal: ${formatBytes(internalDownloadSize)}</div>` : ''}
+                </div>
+                <div class="summary-card">
+                    <h3>Install Size</h3>
+                    <div class="value">${formatBytes(totalInstallSize)}</div>
+                    <div class="label">Uncompressed</div>
+                    ${internalCount > 0 ? `<div class="internal-info">Internal: ${formatBytes(internalInstallSize)}</div>` : ''}
+                </div>
+                <div class="summary-card">
+                    <h3>Modules</h3>
+                    <div class="value">${moduleCount}</div>
+                    <div class="label">Total Count</div>
+                    ${internalCount > 0 ? `<div class="internal-info">Internal: ${internalCount}</div>` : ''}
+                </div>
+            `;
+        }
+        
+        function renderModules(searchTerm = '', sortBy = 'downloadSize') {
+            currentSort = sortBy;
+            let modules = Object.values(data.modules);
+            
+            if (searchTerm) {
+                modules = modules.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
+            }
+            
+            // Apply breakdown filters
+            modules = modules.filter(m => moduleMatchesBreakdownFilters(m));
+            
+            modules.sort((a, b) => {
+                switch(sortBy) {
+                    case 'downloadSize':
+                        // Use binarySize as proxy for download size since it's the main contributor
+                        return (b.binarySize || 0) - (a.binarySize || 0);
+                    case 'installSize':
+                        return calculateModuleTotal(b) - calculateModuleTotal(a);
+                    case 'name':
+                        return a.name.localeCompare(b.name);
+                    default:
+                        return 0;
+                }
+            });
+            
+            const grid = document.getElementById('modulesGrid');
+            if (modules.length === 0) {
+                grid.innerHTML = '<div class="no-results">No modules found</div>';
+                return;
+            }
+            
+            const maxSize = Math.max(...modules.map(m => calculateModuleTotal(m)));
+            
+            grid.innerHTML = modules.map((module, index) => {
+                const totalSize = calculateModuleTotal(module);
+                const binaryPercent = maxSize > 0 ? (module.binarySize || 0) / maxSize * 100 : 0;
+                const imagePercent = maxSize > 0 ? (module.imageFileSize || 0) / maxSize * 100 : 0;
+                
+                // Resources section
+                const resourcesHTML = Object.keys(module.resources || {}).length > 0 ? `
+                    <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resources</h4>
+                    <div class="resources-grid">
+                        ${Object.entries(module.resources).map(([type, res]) => `
+                            <div class="resource-card">
+                                <div class="resource-type">${type}</div>
+                                <div class="resource-size">${formatBytes(res.size)}</div>
+                                <div class="resource-count">${res.count} files</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+                
+                // Top files from asset catalog
+                const topFiles = Object.entries(module.top || {}).sort((a, b) => b[1] - a[1]);
+                const topFilesHTML = topFiles.length > 0 ? `
+                    <div class="top-files">
+                        <h4>Asset Files <span class="count-badge">${topFiles.length}</span></h4>
+                        ${topFiles.map(([path, size]) => {
+                            const fileInfo = getFileTypeInfo(path);
+                            return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
+                        }).join('')}
+                    </div>
+                ` : '';
+                
+                // Source files from LinkMap (show ALL files)
+                const sourceFiles = module.files || [];
+                const filesHTML = sourceFiles.length > 0 ? `
+                    <div class="files-section">
+                        <h4>
+                            Source Files
+                            <span class="count-badge">${sourceFiles.length}</span>
+                        </h4>
+                        <div class="files-table">
+                            <div class="files-table-header">
+                                <div>File Name</div>
+                                <div>Size</div>
+                            </div>
+                            ${sourceFiles.map(file => `<div class="file-row"><div class="file-name" title="${escapeHtml(file.fileName)}">${escapeHtml(file.fileName)}</div><div class="file-size">${formatBytes(file.size)}</div></div>`).join('')}
+                        </div>
+                    </div>
+                ` : '';
+                
+                // Determine which size to display based on current sort
+                const displaySize = currentSort === 'installSize' ? totalSize : (module.binarySize || 0);
+                const displayLabel = currentSort === 'installSize' ? 'Install' : 'Download';
+                
+                return `
+                    <div class="module-card">
+                        <div class="module-header" onclick="toggleModule(${index})">
+                            <div class="module-info">
+                                <div class="module-name-row">
+                                    ${module.name}
+                                    ${module.version ? `<span class="module-version">:${module.version}</span>` : ''}
+                                </div>
+                                ${module.owner ? `<span class="owner-badge">${module.owner}</span>` : ''}
+                                ${module.internal ? `<span class="internal-badge">Internal</span>` : ''}
+                            </div>
+                            <div class="module-stats">
+                                <div class="module-stat">
+                                    <span class="module-stat-label">${displayLabel}</span>
+                                    <span class="module-size">${formatBytes(displaySize)}</span>
+                                </div>
+                                <span class="expand-icon" id="icon-${index}">▼</span>
+                            </div>
+                        </div>
+                        <div class="module-details" id="module-${index}">
+                            <div class="size-bars">
+                                <div class="size-bar">
+                                    <div class="size-bar-label">
+                                        <span class="name">Binary Size</span>
+                                        <span class="value">${formatBytes(module.binarySize || 0)}</span>
+                                    </div>
+                                    <div class="size-bar-fill">
+                                        <div class="size-bar-progress" style="width: ${binaryPercent}%"></div>
+                                    </div>
+                                </div>
+                                <div class="size-bar">
+                                    <div class="size-bar-label">
+                                        <span class="name">Image Assets</span>
+                                        <span class="value">${formatBytes(module.imageFileSize || 0)}</span>
+                                    </div>
+                                    <div class="size-bar-fill">
+                                        <div class="size-bar-progress" style="width: ${imagePercent}%"></div>
+                                    </div>
+                                </div>
+                                <div class="size-bar">
+                                    <div class="size-bar-label">
+                                        <span class="name">Total (Install Size)</span>
+                                        <span class="value">${formatBytes(totalSize)}</span>
+                                    </div>
+                                    <div class="size-bar-fill">
+                                        <div class="size-bar-progress" style="width: 100%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            ${resourcesHTML}
+                            ${topFilesHTML}
+                            ${filesHTML}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function toggleModule(index) {
+            document.getElementById(`module-${index}`).classList.toggle('open');
+            document.getElementById(`icon-${index}`).classList.toggle('open');
+        }
+        
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            renderModules(e.target.value, document.getElementById('sortSelect').value);
+        });
+        
+        document.getElementById('sortSelect').addEventListener('change', (e) => {
+            renderModules(document.getElementById('searchInput').value, e.target.value);
+        });
+        
+        // Ownership Tab Functions
+        let ownershipData = [];
+        let currentOwnershipSort = 'downloadSize';
+        
+        function prepareOwnershipData(sortBy = 'downloadSize') {
+            // Group modules by owner property
+            const modulesByOwner = {};
+            let hasOwners = false;
+            
+            Object.entries(data.modules).forEach(([moduleName, module]) => {
+                // Apply ownership filters
+                if (!moduleMatchesOwnershipFilters(module)) {
+                    return;
+                }
+                
+                const owner = module.owner || 'others';
+                if (module.owner) hasOwners = true;
+                
+                if (!modulesByOwner[owner]) {
+                    modulesByOwner[owner] = {};
+                }
+                modulesByOwner[owner][moduleName] = module;
+            });
+            
+            if (!hasOwners) {
+                return [];
+            }
+            
+            const ownerData = Object.entries(modulesByOwner).map(([ownerName, modules]) => {
+                const moduleList = Object.values(modules);
+                const totalBinarySize = moduleList.reduce((sum, m) => sum + (m.binarySize || 0), 0);
+                const totalInstallSize = moduleList.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
+                const totalFiles = moduleList.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
+                
+                return {
+                    name: ownerName,
+                    modules: modules,
+                    moduleCount: moduleList.length,
+                    fileCount: totalFiles,
+                    totalBinarySize: totalBinarySize,
+                    totalInstallSize: totalInstallSize
+                };
+            });
+            
+            // Sort based on selected metric
+            if (sortBy === 'installSize') {
+                return ownerData.sort((a, b) => b.totalInstallSize - a.totalInstallSize);
+            } else {
+                return ownerData.sort((a, b) => b.totalBinarySize - a.totalBinarySize);
+            }
+        }
+        
+        function renderOwnershipChart() {
+            const chartContainer = document.getElementById('ownershipChart');
+            
+            if (ownershipData.length === 0) {
+                chartContainer.innerHTML = `
+                    <div class="no-results">
+                        <p>No ownership data available.</p>
+                        <p style="font-size: 14px; margin-top: 10px; color: #666;">Run Caliper with the --ownership-file option to enable ownership tracking.</p>
+                    </div>
+                `;
+                document.getElementById('ownerDropdown').disabled = true;
+                return;
+            }
+            
+            // Clear any existing chart
+            chartContainer.innerHTML = '';
+            
+            // Chart dimensions
+            const margin = { top: 20, right: 30, bottom: 120, left: 80 };
+            const barWidth = 40;
+            const barGap = 10;
+            const groupGap = 30;
+            const groupWidth = (barWidth * 2) + barGap;
+            const width = ownershipData.length * (groupWidth + groupGap) + margin.left + margin.right;
+            const height = 450;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            // Calculate totals for percentages
+            const totalBinarySize = ownershipData.reduce((sum, d) => sum + d.totalBinarySize, 0);
+            const totalInstallSize = ownershipData.reduce((sum, d) => sum + d.totalInstallSize, 0);
+            
+            // Create tooltip
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'd3-tooltip');
+            
+            // Create SVG
+            const svg = d3.select('#ownershipChart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .style('display', 'block')
+                .style('margin', '0 auto');
+            
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            
+            // Scales
+            const x = d3.scaleBand()
+                .domain(ownershipData.map(d => d.name))
+                .range([0, width - margin.left - margin.right])
+                .padding(0.3);
+            
+            const maxSize = d3.max(ownershipData, d => Math.max(d.totalBinarySize, d.totalInstallSize));
+            const y = d3.scaleLinear()
+                .domain([0, maxSize])
+                .nice()
+                .range([chartHeight, 0]);
+            
+            // Grid lines
+            g.append('g')
+                .attr('class', 'grid')
+                .call(d3.axisLeft(y)
+                    .tickSize(-width + margin.left + margin.right)
+                    .tickFormat('')
+                );
+            
+            // Y axis with formatted bytes
+            const yAxis = g.append('g')
+                .attr('class', 'axis')
+                .call(d3.axisLeft(y)
+                    .tickFormat(d => formatBytes(d))
+                    .ticks(5)
+                );
+            
+            // X axis
+            const xAxis = g.append('g')
+                .attr('class', 'axis')
+                .attr('transform', `translate(0,${chartHeight})`)
+                .call(d3.axisBottom(x));
+            
+            // Rotate x-axis labels for better readability with long text
+            xAxis.selectAll('text')
+                .attr('transform', 'rotate(-55)')
+                .style('text-anchor', 'end')
+                .attr('dx', '-0.5em')
+                .attr('dy', '0.5em')
+                .style('font-size', '11px');
+            
+            // Create groups for each owner
+            const ownerGroups = g.selectAll('.owner-group')
+                .data(ownershipData)
+                .enter()
+                .append('g')
+                .attr('class', 'owner-group')
+                .attr('transform', d => `translate(${x(d.name)},0)`);
+            
+            // Download size bars (blue)
+            ownerGroups.append('rect')
+                .attr('class', 'bar download-bar')
+                .attr('x', 0)
+                .attr('width', barWidth)
+                .attr('y', chartHeight)
+                .attr('height', 0)
+                .attr('fill', '#063773')
+                .attr('rx', 3)
+                .on('mouseover', function(event, d) {
+                    d3.select(this).style('opacity', 0.7);
+                    const percentage = totalBinarySize > 0 ? ((d.totalBinarySize / totalBinarySize) * 100).toFixed(1) : 0;
+                    tooltip.html(`
+                        <div class="d3-tooltip-owner">${escapeHtml(d.name)}</div>
+                        <div class="d3-tooltip-row">
+                            <span class="d3-tooltip-color" style="background: #063773;"></span>
+                            <span>Download: ${formatBytes(d.totalBinarySize)} (${percentage}%)</span>
+                        </div>
+                        <div class="d3-tooltip-row">
+                            <span>${d.moduleCount} module(s)</span>
+                        </div>
+                    `)
+                    .classed('visible', true)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this).style('opacity', 1);
+                    tooltip.classed('visible', false);
+                })
+                .on('click', function(event, d) {
+                    const index = ownershipData.indexOf(d);
+                    document.getElementById('ownerDropdown').value = index;
+                    renderOwnerDetails(index);
+                    // Scroll to details
+                    document.getElementById('ownerDetailSection').scrollIntoView({ behavior: 'smooth' });
+                })
+                .transition()
+                .duration(800)
+                .ease(d3.easeCubicOut)
+                .attr('y', d => y(d.totalBinarySize))
+                .attr('height', d => chartHeight - y(d.totalBinarySize));
+            
+            // Install size bars (green)
+            ownerGroups.append('rect')
+                .attr('class', 'bar install-bar')
+                .attr('x', barWidth + barGap)
+                .attr('width', barWidth)
+                .attr('y', chartHeight)
+                .attr('height', 0)
+                .attr('fill', '#2ecc71')
+                .attr('rx', 3)
+                .on('mouseover', function(event, d) {
+                    d3.select(this).style('opacity', 0.7);
+                    const percentage = totalInstallSize > 0 ? ((d.totalInstallSize / totalInstallSize) * 100).toFixed(1) : 0;
+                    tooltip.html(`
+                        <div class="d3-tooltip-owner">${escapeHtml(d.name)}</div>
+                        <div class="d3-tooltip-row">
+                            <span class="d3-tooltip-color" style="background: #2ecc71;"></span>
+                            <span>Install: ${formatBytes(d.totalInstallSize)} (${percentage}%)</span>
+                        </div>
+                        <div class="d3-tooltip-row">
+                            <span>${d.moduleCount} module(s), ${d.fileCount} file(s)</span>
+                        </div>
+                    `)
+                    .classed('visible', true)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this).style('opacity', 1);
+                    tooltip.classed('visible', false);
+                })
+                .on('click', function(event, d) {
+                    const index = ownershipData.indexOf(d);
+                    document.getElementById('ownerDropdown').value = index;
+                    renderOwnerDetails(index);
+                    // Scroll to details
+                    document.getElementById('ownerDetailSection').scrollIntoView({ behavior: 'smooth' });
+                })
+                .transition()
+                .duration(800)
+                .ease(d3.easeCubicOut)
+                .delay(100)
+                .attr('y', d => y(d.totalInstallSize))
+                .attr('height', d => chartHeight - y(d.totalInstallSize));
+            
+            // Legend
+            const legend = svg.append('g')
+                .attr('transform', `translate(${width / 2 - 100},${height - 25})`);
+            
+            // Download legend
+            legend.append('rect')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', 20)
+                .attr('height', 12)
+                .attr('fill', '#063773')
+                .attr('rx', 2);
+            
+            legend.append('text')
+                .attr('x', 25)
+                .attr('y', 10)
+                .style('font-size', '12px')
+                .style('fill', '#333')
+                .text('Download size');
+            
+            // Install legend
+            legend.append('rect')
+                .attr('x', 130)
+                .attr('y', 0)
+                .attr('width', 20)
+                .attr('height', 12)
+                .attr('fill', '#2ecc71')
+                .attr('rx', 2);
+            
+            legend.append('text')
+                .attr('x', 155)
+                .attr('y', 10)
+                .style('font-size', '12px')
+                .style('fill', '#333')
+                .text('Install size');
+        }
+        
+        function populateOwnerDropdown(autoSelectApp = false) {
+            const dropdown = document.getElementById('ownerDropdown');
+            
+            if (ownershipData.length === 0) {
+                dropdown.disabled = true;
+                return;
+            }
+            
+            dropdown.innerHTML = '<option value="">Select an owner...</option>';
+            
+            // Create array with owner and original index
+            const ownerWithIndices = ownershipData.map((owner, index) => ({
+                owner: owner,
+                index: index
+            }));
+            
+            // Separate "others" from regular owners
+            const othersEntries = ownerWithIndices.filter(item => 
+                item.owner.name.toLowerCase() === 'others' || 
+                item.owner.name.toLowerCase() === 'other'
+            );
+            const regularEntries = ownerWithIndices.filter(item => 
+                item.owner.name.toLowerCase() !== 'others' && 
+                item.owner.name.toLowerCase() !== 'other'
+            );
+            
+            // Sort regular owners alphabetically
+            regularEntries.sort((a, b) => a.owner.name.localeCompare(b.owner.name));
+            
+            // Combine: regular owners first, then "others"
+            const sortedEntries = [...regularEntries, ...othersEntries];
+            
+            // Populate dropdown
+            let appOwnerIndex = null;
+            sortedEntries.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.index;
+                option.textContent = item.owner.name;
+                dropdown.appendChild(option);
+                
+                // Track "App" owner for auto-selection
+                if (item.owner.name === 'App') {
+                    appOwnerIndex = item.index;
+                }
+            });
+            
+            // Auto-select "App" owner if it exists and autoSelectApp is true
+            if (autoSelectApp && appOwnerIndex !== null) {
+                dropdown.value = appOwnerIndex;
+                renderOwnerDetails(appOwnerIndex);
+            }
+        }
+        
+        function renderOwnerDetails(ownerIndex) {
+            const detailSection = document.getElementById('ownerDetailSection');
+            
+            if (ownerIndex === '') {
+                detailSection.style.display = 'none';
+                return;
+            }
+            
+            const owner = ownershipData[ownerIndex];
+            detailSection.style.display = 'block';
+            
+            // Render summary
+            const summaryDiv = document.getElementById('ownerDetailSummary');
+            summaryDiv.innerHTML = `
+                <div style="text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #333;">${owner.moduleCount}</div>
+                    <div style="font-size: 14px; color: #666; margin-top: 5px;">Component(s)</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #333;">${owner.fileCount}</div>
+                    <div style="font-size: 14px; color: #666; margin-top: 5px;">File(s)</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #063773;">${formatBytes(owner.totalBinarySize)}</div>
+                    <div style="font-size: 14px; color: #666; margin-top: 5px;">Download size</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #2ecc71;">${formatBytes(owner.totalInstallSize)}</div>
+                    <div style="font-size: 14px; color: #666; margin-top: 5px;">Install size</div>
+                </div>
+            `;
+            
+            // Render modules
+            const modulesGrid = document.getElementById('ownerModulesGrid');
+            const modules = Object.entries(owner.modules).sort((a, b) => {
+                return (b[1].binarySize || 0) - (a[1].binarySize || 0);
+            });
+            
+            const maxModuleSize = Math.max(...modules.map(([_, m]) => calculateModuleTotal(m)));
+            
+            modulesGrid.innerHTML = modules.map(([moduleName, module], index) => {
+                const totalSize = calculateModuleTotal(module);
+                const binaryPercent = maxModuleSize > 0 ? (module.binarySize || 0) / maxModuleSize * 100 : 0;
+                const imagePercent = maxModuleSize > 0 ? (module.imageFileSize || 0) / maxModuleSize * 100 : 0;
+                
+                // Resources section
+                const resourcesHTML = Object.keys(module.resources || {}).length > 0 ? `
+                    <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resources</h4>
+                    <div class="resources-grid">
+                        ${Object.entries(module.resources).map(([type, res]) => `
+                            <div class="resource-card">
+                                <div class="resource-type">${type}</div>
+                                <div class="resource-size">${formatBytes(res.size)}</div>
+                                <div class="resource-count">${res.count} files</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+                
+                // Top files from asset catalog
+                const topFiles = Object.entries(module.top || {}).sort((a, b) => b[1] - a[1]);
+                const topFilesHTML = topFiles.length > 0 ? `
+                    <div class="top-files">
+                        <h4>Asset Files <span class="count-badge">${topFiles.length}</span></h4>
+                        ${topFiles.map(([path, size]) => {
+                            const fileInfo = getFileTypeInfo(path);
+                            return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
+                        }).join('')}
+                    </div>
+                ` : '';
+                
+                // Source files from LinkMap
+                const sourceFiles = module.files || [];
+                const filesHTML = sourceFiles.length > 0 ? `
+                    <div class="files-section">
+                        <h4>
+                            Source Files
+                            <span class="count-badge">${sourceFiles.length}</span>
+                        </h4>
+                        <div class="files-table">
+                            <div class="files-table-header">
+                                <div>File Name</div>
+                                <div>Size</div>
+                            </div>
+                            ${sourceFiles.map(file => `<div class="file-row"><div class="file-name" title="${escapeHtml(file.fileName)}">${escapeHtml(file.fileName)}</div><div class="file-size">${formatBytes(file.size)}</div></div>`).join('')}
+                        </div>
+                    </div>
+                ` : '';
+                
+                return `
+                    <div class="module-card">
+                        <div class="module-header" onclick="toggleOwnerModule(${ownerIndex}, ${index})">
+                            <div class="module-info">
+                                <div class="module-name-row">
+                                    ${moduleName}
+                                    ${module.version ? `<span class="module-version">:${module.version}</span>` : ''}
+                                </div>
+                                ${module.internal ? `<span class="internal-badge">Internal</span>` : ''}
+                            </div>
+                            <div class="module-stats">
+                                <div class="module-stat">
+                                    <span class="module-stat-label">Download</span>
+                                    <span class="module-size">${formatBytes(module.binarySize || 0)}</span>
+                                </div>
+                                <span class="expand-icon" id="owner-module-icon-${ownerIndex}-${index}">▼</span>
+                            </div>
+                        </div>
+                        <div class="module-details" id="owner-module-${ownerIndex}-${index}">
+                            <div class="size-bars">
+                                <div class="size-bar">
+                                    <div class="size-bar-label">
+                                        <span class="name">Binary Size</span>
+                                        <span class="value">${formatBytes(module.binarySize || 0)}</span>
+                                    </div>
+                                    <div class="size-bar-fill">
+                                        <div class="size-bar-progress" style="width: ${binaryPercent}%"></div>
+                                    </div>
+                                </div>
+                                <div class="size-bar">
+                                    <div class="size-bar-label">
+                                        <span class="name">Image Assets</span>
+                                        <span class="value">${formatBytes(module.imageFileSize || 0)}</span>
+                                    </div>
+                                    <div class="size-bar-fill">
+                                        <div class="size-bar-progress" style="width: ${imagePercent}%"></div>
+                                    </div>
+                                </div>
+                                <div class="size-bar">
+                                    <div class="size-bar-label">
+                                        <span class="name">Total (Install Size)</span>
+                                        <span class="value">${formatBytes(totalSize)}</span>
+                                    </div>
+                                    <div class="size-bar-fill">
+                                        <div class="size-bar-progress" style="width: 100%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            ${resourcesHTML}
+                            ${topFilesHTML}
+                            ${filesHTML}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function toggleOwnerModule(ownerIndex, moduleIndex) {
+            document.getElementById(`owner-module-${ownerIndex}-${moduleIndex}`).classList.toggle('open');
+            document.getElementById(`owner-module-icon-${ownerIndex}-${moduleIndex}`).classList.toggle('open');
+        }
+        
+        document.getElementById('ownerDropdown').addEventListener('change', (e) => {
+            renderOwnerDetails(e.target.value);
+        });
+        
+        document.getElementById('ownershipSortSelect').addEventListener('change', (e) => {
+            currentOwnershipSort = e.target.value;
+            ownershipData = prepareOwnershipData(currentOwnershipSort);
+            renderOwnershipChart();
+            populateOwnerDropdown();
+            // Reset detail view
+            document.getElementById('ownerDropdown').value = '';
+            document.getElementById('ownerDetailSection').style.display = 'none';
+        });
+        
+        updateHeader();
+        renderSummary();
+        renderModules();
+        ownershipData = prepareOwnershipData(currentOwnershipSort);
+        renderOwnershipChart();
+        populateOwnerDropdown(true); // Auto-select "App" on initial page load
+        
+        // Initialize Insights tab when it's shown
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function(e) {
+                if (this.textContent.trim() === 'Insights') {
+                    setTimeout(renderInsights, 100); // Delay to ensure tab is visible
+                }
+            });
+        });
+        
+        // Insights Tab Functions
+        function renderInsights() {
+            renderTopOffenders();
+            renderTreemap();
+            renderResourceBreakdown();
+            renderUserImpact();
+        }
+        
+        // 1. Top Offenders Dashboard
+        function renderTopOffenders() {
+            const allModules = Object.values(data.modules);
+            
+            // Apply insights filters
+            const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
+            
+            // Top 20 Modules by size
+            const topModules = modules
+                .map(m => ({ name: m.name, size: calculateModuleTotal(m), owner: m.owner }))
+                .sort((a, b) => b.size - a.size)
+                .slice(0, 20);
+            
+            // Top 20 Source Files across all modules
+            const allFiles = [];
+            modules.forEach(module => {
+                if (module.files) {
+                    module.files.forEach(file => {
+                        allFiles.push({
+                            name: file.fileName,
+                            size: file.size,
+                            module: module.name
+                        });
+                    });
+                }
+            });
+            const topFiles = allFiles.sort((a, b) => b.size - a.size).slice(0, 20);
+            
+            // Top 20 Asset Files across all modules (excluding frameworks)
+            const allAssets = [];
+            modules.forEach(module => {
+                // Exclude external modules (frameworks) from asset files
+                if (module.internal === true && module.top) {
+                    Object.entries(module.top).forEach(([path, size]) => {
+                        allAssets.push({
+                            name: path,
+                            size: size,
+                            module: module.name
+                        });
+                    });
+                }
+            });
+            const topAssets = allAssets.sort((a, b) => b.size - a.size).slice(0, 20);
+            
+            // Render Top Modules Bar Chart
+            renderHorizontalBarChart('topModulesChart', topModules, 'size', 'name', '#063773');
+            
+            // Render Top Files Bar Chart
+            renderHorizontalBarChart('topFilesChart', topFiles, 'size', 'name', '#e74c3c');
+            
+            // Render Top Assets Bar Chart
+            renderHorizontalBarChart('topAssetsChart', topAssets, 'size', 'name', '#3498db');
+        }
+        
+        function renderHorizontalBarChart(containerId, data, sizeKey, nameKey, color) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="no-data">No data available</div>';
+                return;
+            }
+            
+            // Get container width and make chart responsive
+            const containerWidth = container.offsetWidth || 400;
+            const margin = { top: 10, right: 60, bottom: 30, left: 140 };
+            const width = Math.max(containerWidth, 300);
+            const height = data.length * 35 + margin.top + margin.bottom;
+            
+            const svg = d3.select('#' + containerId)
+                .append('svg')
+                .attr('width', '100%')
+                .attr('height', height)
+                .attr('viewBox', `0 0 ${width} ${height}`)
+                .attr('preserveAspectRatio', 'xMidYMid meet');
+            
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d[sizeKey])])
+                .range([0, width - margin.left - margin.right]);
+            
+            const y = d3.scaleBand()
+                .domain(data.map((d, i) => i))
+                .range([0, height - margin.top - margin.bottom])
+                .padding(0.2);
+            
+            // Create tooltip
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'd3-tooltip');
+            
+            // Bars
+            g.selectAll('.bar')
+                .data(data)
+                .enter()
+                .append('rect')
+                .attr('class', 'bar')
+                .attr('x', 0)
+                .attr('y', (d, i) => y(i))
+                .attr('width', 0)
+                .attr('height', y.bandwidth())
+                .attr('fill', color)
+                .attr('rx', 3)
+                .on('mouseover', function(event, d) {
+                    d3.select(this).style('opacity', 0.7);
+                    let tooltipContent = `
+                        <div style="font-weight: bold; margin-bottom: 5px;">${escapeHtml(d[nameKey])}</div>
+                        <div>Size: ${formatBytes(d[sizeKey])}</div>
+                    `;
+                    if (d.module) {
+                        tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Module: ${escapeHtml(d.module)}</div>`;
+                    }
+                    tooltip.html(tooltipContent)
+                        .classed('visible', true)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this).style('opacity', 1);
+                    tooltip.classed('visible', false);
+                })
+                .transition()
+                .duration(800)
+                .attr('width', d => x(d[sizeKey]));
+            
+            // Labels (names)
+            g.selectAll('.label')
+                .data(data)
+                .enter()
+                .append('text')
+                .attr('class', 'label')
+                .attr('x', -10)
+                .attr('y', (d, i) => y(i) + y.bandwidth() / 2)
+                .attr('text-anchor', 'end')
+                .attr('dominant-baseline', 'middle')
+                .style('font-size', '11px')
+                .style('fill', '#333')
+                .text(d => {
+                    const name = d[nameKey];
+                    const maxLen = Math.floor((margin.left - 20) / 6); // Approximate characters that fit
+                    return name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
+                })
+                .append('title')
+                .text(d => d[nameKey]);
+            
+            // Size labels
+            g.selectAll('.size-label')
+                .data(data)
+                .enter()
+                .append('text')
+                .attr('class', 'size-label')
+                .attr('x', d => x(d[sizeKey]) + 5)
+                .attr('y', (d, i) => y(i) + y.bandwidth() / 2)
+                .attr('text-anchor', 'start')
+                .attr('dominant-baseline', 'middle')
+                .style('font-size', '10px')
+                .style('fill', '#666')
+                .style('font-weight', 'bold')
+                .text(d => formatBytes(d[sizeKey]));
+        }
+        
+        // 2. Treemap Visualization
+        function renderTreemap() {
+            const container = document.getElementById('treemapChart');
+            container.innerHTML = '';
+            
+            const allModules = Object.values(data.modules);
+            
+            // Apply insights filters
+            const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
+            
+            // Prepare hierarchical data
+            const treemapData = {
+                name: 'App',
+                children: modules.map(m => ({
+                    name: m.name,
+                    value: calculateModuleTotal(m),
+                    binarySize: m.binarySize || 0,
+                    imageSize: m.imageFileSize || 0,
+                    owner: m.owner
+                }))
+            };
+            
+            // Use container's full width for better fit
+            const containerWidth = container.offsetWidth || 1340;
+            const width = containerWidth;
+            const height = 600;
+            
+            const svg = d3.select('#treemapChart')
+                .append('svg')
+                .attr('width', '100%')
+                .attr('height', height)
+                .attr('viewBox', `0 0 ${width} ${height}`)
+                .attr('preserveAspectRatio', 'xMidYMid meet');
+            
+            const color = d3.scaleOrdinal()
+                .domain(modules.map(m => m.owner || 'others'))
+                .range(d3.schemeTableau10);
+            
+            const root = d3.hierarchy(treemapData)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+            
+            d3.treemap()
+                .size([width, height])
+                .padding(2)
+                .round(true)
+                (root);
+            
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'd3-tooltip');
+            
+            const leaf = svg.selectAll('g')
+                .data(root.leaves())
+                .enter()
+                .append('g')
+                .attr('transform', d => `translate(${d.x0},${d.y0})`);
+            
+            leaf.append('rect')
+                .attr('width', d => d.x1 - d.x0)
+                .attr('height', d => d.y1 - d.y0)
+                .attr('fill', d => color(d.data.owner || 'others'))
+                .attr('opacity', 0.8)
+                .attr('stroke', 'white')
+                .attr('stroke-width', 2)
+                .style('cursor', 'pointer')
+                .on('mouseover', function(event, d) {
+                    d3.select(this).attr('opacity', 1);
+                    const percentage = ((d.value / data.totalInstallSize) * 100).toFixed(1);
+                    tooltip.html(`
+                        <div style="font-weight: bold; margin-bottom: 5px;">${escapeHtml(d.data.name)}</div>
+                        <div>Total: ${formatBytes(d.value)} (${percentage}%)</div>
+                        <div>Binary: ${formatBytes(d.data.binarySize)}</div>
+                        <div>Assets: ${formatBytes(d.data.imageSize)}</div>
+                        ${d.data.owner ? `<div style="margin-top: 5px; color: #ffd700;">Owner: ${escapeHtml(d.data.owner)}</div>` : ''}
+                    `)
+                    .classed('visible', true)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('opacity', 0.8);
+                    tooltip.classed('visible', false);
+                })
+                .transition()
+                .duration(800)
+                .attrTween('width', function(d) {
+                    const i = d3.interpolate(0, d.x1 - d.x0);
+                    return t => i(t);
+                })
+                .attrTween('height', function(d) {
+                    const i = d3.interpolate(0, d.y1 - d.y0);
+                    return t => i(t);
+                });
+            
+            // Add text labels for larger rectangles
+            leaf.append('text')
+                .attr('x', 4)
+                .attr('y', 16)
+                .text(d => {
+                    const width = d.x1 - d.x0;
+                    const height = d.y1 - d.y0;
+                    if (width > 80 && height > 30) {
+                        return d.data.name.length > 15 ? d.data.name.substring(0, 15) + '...' : d.data.name;
+                    }
+                    return '';
+                })
+                .style('font-size', '11px')
+                .style('fill', 'white')
+                .style('font-weight', 'bold')
+                .style('pointer-events', 'none');
+            
+            leaf.append('text')
+                .attr('x', 4)
+                .attr('y', 30)
+                .text(d => {
+                    const width = d.x1 - d.x0;
+                    const height = d.y1 - d.y0;
+                    if (width > 80 && height > 45) {
+                        return formatBytes(d.value);
+                    }
+                    return '';
+                })
+                .style('font-size', '10px')
+                .style('fill', 'rgba(255,255,255,0.9)')
+                .style('pointer-events', 'none');
+        }
+        
+        // 3. Resource Type Breakdown
+        function renderResourceBreakdown() {
+            const allModules = Object.values(data.modules);
+            
+            // Apply insights filters
+            const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
+            
+            // Aggregate all resources
+            const resourceStats = {};
+            
+            // Add binary as a resource type
+            let totalBinarySize = 0;
+            let binaryModuleCount = 0;
+            modules.forEach(m => {
+                const binarySize = m.binarySize || 0;
+                if (binarySize > 0) {
+                    totalBinarySize += binarySize;
+                    binaryModuleCount++;
+                }
+            });
+            if (totalBinarySize > 0) {
+                resourceStats['Binary'] = { size: totalBinarySize, count: binaryModuleCount };
+            }
+            
+            // Add images
+            let totalImageSize = 0;
+            let imageFileCount = 0;
+            modules.forEach(m => {
+                totalImageSize += m.imageFileSize || 0;
+                // Count individual image files from asset catalog
+                if (m.top) {
+                    imageFileCount += Object.keys(m.top).length;
+                }
+            });
+            if (totalImageSize > 0) {
+                resourceStats['Images'] = { size: totalImageSize, count: imageFileCount };
+            }
+            
+            // Add other resources (fonts, PDFs, etc.)
+            modules.forEach(module => {
+                Object.entries(module.resources || {}).forEach(([type, res]) => {
+                    if (!resourceStats[type]) {
+                        resourceStats[type] = { size: 0, count: 0 };
+                    }
+                    resourceStats[type].size += res.size;
+                    resourceStats[type].count += res.count;
+                });
+            });
+            
+            const resourceData = Object.entries(resourceStats).map(([type, stats]) => ({
+                type,
+                size: stats.size,
+                count: stats.count
+            }));
+            
+            // Calculate the actual total for filtered modules
+            const calculatedTotal = modules.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
+            const resourceTotal = resourceData.reduce((sum, r) => sum + r.size, 0);
+            
+            // If there's a discrepancy, add an "Other" category to account for it
+            if (calculatedTotal > resourceTotal) {
+                const otherSize = calculatedTotal - resourceTotal;
+                if (otherSize > 0) {
+                    resourceData.push({
+                        type: 'Other',
+                        size: otherSize,
+                        count: 1
+                    });
+                }
+            }
+            
+            // Sort by size descending
+            resourceData.sort((a, b) => b.size - a.size);
+            
+            // Create shared color scale
+            const resourceColorScale = d3.scaleOrdinal()
+                .domain(resourceData.map(d => d.type))
+                .range(d3.schemeSet3);
+            
+            // Render Count Donut Chart (without legend)
+            renderDonutChart('resourceCountChart', resourceData, 'count', 'type', 'files', resourceColorScale, false);
+            
+            // Render Size Donut Chart (without legend)
+            renderDonutChart('resourceSizeChart', resourceData, 'size', 'type', 'bytes', resourceColorScale, false);
+            
+            // Render shared legend below both charts
+            renderResourceLegend(resourceData, resourceColorScale);
+        }
+        
+        function renderDonutChart(containerId, data, valueKey, labelKey, unit, colorScale, showLegend = true) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="no-data">No data available</div>';
+                return;
+            }
+            
+            // Create wrapper - simple div for chart only
+            const wrapper = d3.select('#' + containerId)
+                .append('div')
+                .style('display', 'flex')
+                .style('align-items', 'center')
+                .style('justify-content', 'center');
+            
+            const chartWidth = 280;
+            const chartHeight = 280;
+            const radius = Math.min(chartWidth, chartHeight) / 2 - 20;
+            
+            const svg = wrapper
+                .append('svg')
+                .attr('width', chartWidth)
+                .attr('height', chartHeight);
+            
+            const g = svg.append('g')
+                .attr('transform', `translate(${chartWidth / 2},${chartHeight / 2})`);
+            
+            // Use provided color scale or create default
+            const color = colorScale || d3.scaleOrdinal()
+                .domain(data.map(d => d[labelKey]))
+                .range(d3.schemeSet3);
+            
+            const pie = d3.pie()
+                .value(d => d[valueKey])
+                .sort(null);
+            
+            const arc = d3.arc()
+                .innerRadius(radius * 0.6)
+                .outerRadius(radius);
+            
+            const arcHover = d3.arc()
+                .innerRadius(radius * 0.6)
+                .outerRadius(radius * 1.05);
+            
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'd3-tooltip');
+            
+            const total = d3.sum(data, d => d[valueKey]);
+            
+            const arcs = g.selectAll('.arc')
+                .data(pie(data))
+                .enter()
+                .append('g')
+                .attr('class', 'arc');
+            
+            arcs.append('path')
+                .attr('d', arc)
+                .attr('fill', d => color(d.data[labelKey]))
+                .attr('stroke', 'white')
+                .attr('stroke-width', 2)
+                .style('cursor', 'pointer')
+                .on('mouseover', function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('d', arcHover);
+                    
+                    const percentage = ((d.data[valueKey] / total) * 100).toFixed(1);
+                    const displayValue = unit === 'bytes' ? formatBytes(d.data[valueKey]) : d.data[valueKey].toLocaleString();
+                    
+                    tooltip.html(`
+                        <div style="font-weight: bold; margin-bottom: 5px;">${escapeHtml(d.data[labelKey])}</div>
+                        <div>${displayValue} ${unit === 'bytes' ? '' : unit}</div>
+                        <div>${percentage}% of total</div>
+                    `)
+                    .classed('visible', true)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('d', arc);
+                    tooltip.classed('visible', false);
+                })
+                .transition()
+                .duration(800)
+                .attrTween('d', function(d) {
+                    const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
+                    return t => arc(i(t));
+                });
+            
+            // Center text
+            g.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '-0.5em')
+                .style('font-size', '24px')
+                .style('font-weight', 'bold')
+                .style('fill', '#333')
+                .text(unit === 'bytes' ? formatBytes(total) : total.toLocaleString());
+            
+            g.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '1.2em')
+                .style('font-size', '12px')
+                .style('fill', '#666')
+                .text('Total ' + (unit === 'bytes' ? 'Size' : 'Count'));
+        }
+        
+        function renderResourceLegend(resourceData, colorScale) {
+            const legendContainer = document.getElementById('resourceLegend');
+            legendContainer.innerHTML = '';
+            
+            // Sort data by size descending for legend
+            const sortedData = [...resourceData].sort((a, b) => b.size - a.size);
+            
+            sortedData.forEach(d => {
+                const legendItem = document.createElement('div');
+                legendItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px;';
+                
+                const colorBox = document.createElement('div');
+                colorBox.style.cssText = `width: 16px; height: 16px; background-color: ${colorScale(d.type)}; border-radius: 3px; flex-shrink: 0;`;
+                legendItem.appendChild(colorBox);
+                
+                const textContainer = document.createElement('div');
+                textContainer.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+                
+                const typeName = document.createElement('span');
+                typeName.style.cssText = 'font-size: 13px; color: #333; font-weight: 600; min-width: 60px;';
+                typeName.textContent = d.type;
+                textContainer.appendChild(typeName);
+                
+                const sizeText = document.createElement('span');
+                sizeText.style.cssText = 'font-size: 12px; color: #666;';
+                sizeText.textContent = formatBytes(d.size);
+                textContainer.appendChild(sizeText);
+                
+                const countText = document.createElement('span');
+                countText.style.cssText = 'font-size: 11px; color: #999;';
+                countText.textContent = `(${d.count.toLocaleString()} ${d.count === 1 ? 'item' : 'items'})`;
+                textContainer.appendChild(countText);
+                
+                legendItem.appendChild(textContainer);
+                legendContainer.appendChild(legendItem);
+            });
+        }
+        
+        // 4. User Impact Score
+        function renderUserImpact() {
+            const container = document.getElementById('userImpactSection');
+            const downloadSize = data.totalPackageSize || 0;
+            const installSize = data.totalInstallSize || 0;
+            
+            // Network speeds in Mbps
+            const networks = [
+                { name: 'WiFi', speed: 100, icon: '📶', color: '#2ecc71' },
+                { name: '5G', speed: 50, icon: '📱', color: '#3498db' },
+                { name: '4G', speed: 10, icon: '📱', color: '#f39c12' },
+                { name: '3G', speed: 1, icon: '📱', color: '#e74c3c' }
+            ];
+            
+            // Calculate download times (in seconds)
+            const downloadSizeMB = downloadSize / (1024 * 1024);
+            const downloadTimes = networks.map(net => ({
+                ...net,
+                time: (downloadSizeMB * 8) / net.speed, // Convert to seconds
+                size: downloadSize
+            }));
+            
+            // iPhone storage comparison (using 64GB as baseline)
+            const iPhone64GB = 64 * 1024 * 1024 * 1024;
+            const iPhone128GB = 128 * 1024 * 1024 * 1024;
+            const iPhone256GB = 256 * 1024 * 1024 * 1024;
+            
+            const storagePercentages = [
+                { capacity: '64GB', size: iPhone64GB, percent: (installSize / iPhone64GB) * 100 },
+                { capacity: '128GB', size: iPhone128GB, percent: (installSize / iPhone128GB) * 100 },
+                { capacity: '256GB', size: iPhone256GB, percent: (installSize / iPhone256GB) * 100 }
+            ];
+            
+            function formatTime(seconds) {
+                if (seconds < 60) return Math.round(seconds) + 's';
+                const minutes = Math.floor(seconds / 60);
+                const secs = Math.round(seconds % 60);
+                return `${minutes}m ${secs}s`;
+            }
+            
+            container.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                    ${downloadTimes.map(net => `
+                        <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid ${net.color};">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="font-size: 24px;">${net.icon}</div>
+                                <div style="font-size: 14px; color: #666; font-weight: 600;">${net.name}</div>
+                            </div>
+                            <div style="font-size: 32px; font-weight: bold; color: ${net.color}; margin-bottom: 5px;">${formatTime(net.time)}</div>
+                            <div style="font-size: 12px; color: #999;">Download time for ${formatBytes(downloadSize)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <h3 style="font-size: 16px; color: #333; margin-bottom: 15px;">📱 iPhone Storage Impact</h3>
+                <div style="background: white; padding: 25px; border-radius: 8px;">
+                    ${storagePercentages.map(storage => `
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="font-size: 14px; color: #333; font-weight: 500;">iPhone ${storage.capacity}</span>
+                                <span style="font-size: 14px; color: #063773; font-weight: bold;">${storage.percent.toFixed(3)}%</span>
+                            </div>
+                            <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
+                                <div style="background: linear-gradient(90deg, #063773 0%, #0a5aa8 100%); height: 100%; width: ${Math.min(storage.percent, 100)}%; transition: width 0.8s ease;"></div>
+                            </div>
+                            <div style="font-size: 11px; color: #999; margin-top: 5px;">${formatBytes(installSize)} of ${storage.capacity}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

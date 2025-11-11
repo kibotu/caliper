@@ -1,0 +1,713 @@
+{
+  "appInfo" : {
+    "appModuleName" : "CaliperSampleApp",
+    "appName" : "CaliperSampleApp",
+    "buildNumber" : "1",
+    "bundleIdentifier" : "com.caliper.sample",
+    "version" : "1.0"
+  },
+  "modules" : {
+    "CaliperSampleApp" : {
+      "binarySize" : 22892,
+      "files" : [
+        {
+          "fileName" : "AppDelegate",
+          "size" : 15448,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ViewController",
+          "size" : 6268,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Orchard",
+          "size" : 340,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Hashable",
+          "size" : 248,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "UIApplicationLaunchOptionsKey",
+          "size" : 208,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Equatable",
+          "size" : 132,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RawRepresentable",
+          "size" : 108,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "NSLayoutConstraint",
+          "size" : 76,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "String",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 24,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "internal" : true,
+      "name" : "CaliperSampleApp",
+      "owner" : "App",
+      "proguard" : 205095,
+      "resources" : {
+        "plist" : {
+          "count" : 1,
+          "size" : 756
+        }
+      },
+      "top" : {
+        "Payload\/CaliperSampleApp.app\/" : 0,
+        "Payload\/CaliperSampleApp.app\/Info.plist" : 756,
+        "Payload\/CaliperSampleApp.app\/PkgInfo" : 8
+      }
+    },
+    "Foundation.tbd" : {
+      "binarySize" : 440,
+      "files" : [
+        {
+          "fileName" : "String",
+          "size" : 140,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Date",
+          "size" : 80,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "StringProtocol",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Array",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Dictionary",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "_NSRange",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Data",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Range< where A == Swift",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "_convertNSErrorToError",
+          "size" : 20,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "Foundation.tbd",
+      "proguard" : 440,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "Orchard" : {
+      "binarySize" : 27819,
+      "files" : [
+        {
+          "fileName" : "ConsoleLogger",
+          "size" : 6924,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "NSThread",
+          "size" : 2696,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ConsoleLoggerConfig",
+          "size" : 1400,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "paddedToString",
+          "size" : 436,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "demangle",
+          "size" : 352,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "NSRegularExpression",
+          "size" : 228,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Hashable",
+          "size" : 216,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RawRepresentable",
+          "size" : 216,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "demangleSymbol",
+          "size" : 172,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "cDemangle",
+          "size" : 152,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RTLD_DEFAULT",
+          "size" : 116,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "HasApply",
+          "size" : 100,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Decodable",
+          "size" : 92,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "String",
+          "size" : 80,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Comparable",
+          "size" : 80,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Encodable",
+          "size" : 76,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Data",
+          "size" : 64,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "AssociatedConformance<Orchard>",
+          "size" : 16,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "OptionSet",
+          "size" : 16,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "SetAlgebra",
+          "size" : 12,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Equatable",
+          "size" : 12,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 8,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "internal" : true,
+      "name" : "Orchard",
+      "owner" : "App",
+      "proguard" : 27819,
+      "resources" : {
+
+      },
+      "top" : {
+
+      },
+      "version" : "1.0.8"
+    },
+    "UIFoundation" : {
+      "binarySize" : 16,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "UIFoundation",
+      "proguard" : 16,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "UIKitCore" : {
+      "binarySize" : 20,
+      "files" : [
+        {
+          "fileName" : "UIApplicationMain",
+          "size" : 20,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "UIKitCore",
+      "proguard" : 20,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libc++.tbd" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libc++.tbd",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libclang_rt.ios(os_version_check.c)" : {
+      "binarySize" : 1901,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libclang_rt.ios(os_version_check.c)",
+      "proguard" : 1901,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libcompiler_rt.dylib" : {
+      "binarySize" : 8,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libcompiler_rt.dylib",
+      "proguard" : 8,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libdispatch.dylib" : {
+      "binarySize" : 60,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libdispatch.dylib",
+      "proguard" : 60,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libdyld.dylib" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libdyld.dylib",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libobjc.tbd" : {
+      "binarySize" : 160,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libobjc.tbd",
+      "proguard" : 160,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Actor.cpp)" : {
+      "binarySize" : 743,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Actor.cpp)",
+      "proguard" : 743,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Error.cpp)" : {
+      "binarySize" : 12,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Error.cpp)",
+      "proguard" : 12,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Exclusivity.cpp)" : {
+      "binarySize" : 389,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Exclusivity.cpp)",
+      "proguard" : 389,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(MutexPThread.cpp)" : {
+      "binarySize" : 2592,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(MutexPThread.cpp)",
+      "proguard" : 2592,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Overrides.cpp)" : {
+      "binarySize" : 577,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Overrides.cpp)",
+      "proguard" : 577,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(Task.cpp)" : {
+      "binarySize" : 1284,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(Task.cpp)",
+      "proguard" : 1284,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(TaskStatus.cpp)" : {
+      "binarySize" : 1128,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(TaskStatus.cpp)",
+      "proguard" : 1128,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCompatibility56(ThreadSanitizer.cpp)" : {
+      "binarySize" : 350,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCompatibility56(ThreadSanitizer.cpp)",
+      "proguard" : 350,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libswiftCore.tbd" : {
+      "binarySize" : 1300,
+      "files" : [
+        {
+          "fileName" : "String",
+          "size" : 156,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "RawRepresentable< where A: Swift",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Hasher",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CommandLine",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "print",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Character",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "_SwiftNewtypeWrapper< where A: Swift",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "DefaultStringInterpolation",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 20,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libswiftCore.tbd",
+      "proguard" : 1300,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_c.dylib" : {
+      "binarySize" : 248,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_c.dylib",
+      "proguard" : 248,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_malloc.dylib" : {
+      "binarySize" : 60,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_malloc.dylib",
+      "proguard" : 60,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_platform.dylib" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_platform.dylib",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libsystem_pthread.dylib" : {
+      "binarySize" : 40,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libsystem_pthread.dylib",
+      "proguard" : 40,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "libxpc.dylib" : {
+      "binarySize" : 20,
+      "files" : [
+
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "libxpc.dylib",
+      "proguard" : 20,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    },
+    "linker synthesized" : {
+      "binarySize" : 1860,
+      "files" : [
+        {
+          "fileName" : "ConsoleLoggerConfig",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "CustomStringConvertible",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Orchard",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ConsoleLogger",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "String",
+          "size" : 0,
+          "symbolCount" : 1
+        }
+      ],
+      "imageFileSize" : 0,
+      "imageSize" : 0,
+      "name" : "linker synthesized",
+      "proguard" : 1860,
+      "resources" : {
+
+      },
+      "top" : {
+
+      }
+    }
+  },
+  "totalInstallSize" : 205351,
+  "totalPackageSize" : 49071
+}
