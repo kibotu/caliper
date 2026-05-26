@@ -30,9 +30,8 @@ struct IPAParser {
         // Clean up handler
         pipe.fileHandleForReading.readabilityHandler = nil
         
-        guard let output = String(data: outputData, encoding: .utf8) else {
-            throw CaliperError.unzipFailed
-        }
+        let output = String(data: outputData, encoding: .utf8)
+            ?? String(decoding: outputData, as: UTF8.self)
         
         return parseUnzipOutput(output)
     }
