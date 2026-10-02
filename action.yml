@@ -26,6 +26,12 @@ inputs:
     description: 'Directory to output report files (defaults to current directory)'
     required: false
     default: '.'
+  max-package-size:
+    description: 'Fail if the IPA exceeds this many bytes (e.g. "104857600" for 100 MB)'
+    required: false
+  max-install-size:
+    description: 'Fail if the installed size exceeds this many bytes'
+    required: false
 
 outputs:
   report-json:
@@ -108,6 +114,14 @@ runs:
         
         if [ -n "${{ inputs.package-mapping-file }}" ]; then
           CMD="$CMD --package-mapping-file ${{ inputs.package-mapping-file }}"
+        fi
+
+        if [ -n "${{ inputs.max-package-size }}" ]; then
+          CMD="$CMD --max-package-size ${{ inputs.max-package-size }}"
+        fi
+
+        if [ -n "${{ inputs.max-install-size }}" ]; then
+          CMD="$CMD --max-install-size ${{ inputs.max-install-size }}"
         fi
         
         # Change to output directory
