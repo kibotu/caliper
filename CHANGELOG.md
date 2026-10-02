@@ -1,7 +1,83 @@
 # Changelog
 
+All notable changes to this project are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- **Size thresholds.** `--max-package-size` and `--max-install-size` fail the run with a
+  non-zero exit code and a message stating how far over the limit it is. Both reports are
+  written before the check, so a regression still leaves the evidence behind it.
+- **`--output-dir`.** Reports are no longer forced into the current directory.
+- **Multiple owners.** An ownership entry may use `owners: [a, b]` as well as `owner: a`.
+  The first entry is reported as `owner`, the rest as a new `additionalOwners` field.
+- **Test suite.** 35 tests over the LinkMap parser, ownership matching and service
+  behaviour, and the HTML reporter. `Package.swift` now has a `CaliperCore` library
+  target and a `CaliperCoreTests` test target; analysis code moved out of the executable.
+  `swift test` runs in CI.
+
+### Changed
+
+- **The HTML report is now self-contained.** d3 v7.9.0 is vendored and inlined instead of
+  being fetched from `d3js.org`, so the report opens with no network access — offline, on
+  an air-gapped runner, or from a downloaded CI artifact. Previously every chart rendered
+  empty when that request failed.
+- Module totals read a single canonical install size instead of being recomputed in
+  JavaScript.
+
+### Fixed
+
+- **Dead-stripped symbols were counted.** A `# Dead stripped symbols:` section did not end
+  the symbol section, so the linker-removed bytes of every module that defined one were
+  added to its total.
+- **Images were double-counted.** Module totals added `imageFileSize` and `resources`
+  together, but the parsers record each image in both. Every image counted twice.
+- **Ownership patterns treated `.` as a wildcard.** `Foundation.tbd` also matched
+  `FoundationXtbd`. Identifiers are now escaped before `*` and `?` are translated.
+- **Package versions were assigned non-deterministically.** Version matching iterated a
+  dictionary and stopped at the first partial match, so a module matching several package
+  identities could get a different version on each run. Matching is now ordered, and the
+  longest partial match wins.
+- **The version report was wrong.** `--version` reported `1.0.0` while the repository was
+  at `1.2.2`.
+- **HTML injection.** Module names, owners and resource types were interpolated into the
+  page unescaped, and the report payload was embedded without escaping `<`, so a crafted
+  name could break out of the script element.
+- `switchTab` relied on the implicit global `event`, which fails under strict mode.
+- Clicking the Insights tab re-rendered every chart each time and appended a new set of
+  tooltip elements, growing the DOM without bound. It now renders once.
+- Treemap percentages divided a module's size by the whole-app total, understating every
+  cell whenever a filter hid modules. They are now relative to what the treemap draws.
+- Per-module "download size" was documented as `binarySize`, which is uncompressed LinkMap
+  output. It now uses the modules' real compressed file sizes.
+- A duplicate `moduleName` in a package-mapping file crashed via
+  `Dictionary(uniqueKeysWithValues:)`. It now warns and keeps the first entry.
+- The unzipped IPA directory is created next to the IPA rather than in the working
+  directory.
+- `make analyze` and `make example` passed `--output`, `--group-by-owner` and
+  `--filter-owner`, none of which existed, so both targets failed with a usage error.
+  They pass the supported flags and gained `PACKAGE_RESOLVED`, `PACKAGE_MAPPING`,
+  `OUTPUT_DIR` and the two threshold variables.
+- A missing or malformed ownership file now reports which file failed and why.
+- Progress calculation no longer divides by zero on an empty file list.
+
+### Removed
+
+- A dead module-renaming path. `buildAppSizeReport`, `extractModuleName` and both
+  `SizeCalculator` passes accepted a `moduleMapping` dictionary that was always empty;
+  the CLI stopped producing it when ownership moved to pattern matching, and the plumbing
+  was never removed.
+- Non-deterministic debug logging that fired on roughly 0.1% of frameworks and bundles.
+
 ## [1.2.2] - 2026-05-26
 
 ### Fixed
-- **IPA parsing bug**: Fixed misleading "Failed to unzip IPA file" error when `/usr/bin/unzip -v` command succeeds but UTF-8 string conversion of output fails. Changed from `guard let String(data:outputData, encoding: .utf8)` to `String(data:outputData, encoding: .utf8) ?? String(decoding:outputData, as: UTF8.self)` in `IPAParser.generateReport()`. This ensures reliable output reading even with certain IPA file formats.
-s
+
+- **IPA parsing bug**: Fixed misleading "Failed to unzip IPA file" error when
+  `/usr/bin/unzip -v` succeeds but UTF-8 conversion of its output fails. Changed from
+  `guard let String(data:outputData, encoding: .utf8)` to
+  `String(data:outputData, encoding: .utf8) ?? String(decoding:outputData, as: UTF8.self)`.
