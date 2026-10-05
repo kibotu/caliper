@@ -97,25 +97,26 @@ public struct AssetCatalogParser {
                   let sizeOnDisk = asset.SizeOnDisk else {
                 continue
             }
-            
+
             let size = Int64(sizeOnDisk)
+
+            // Record what is inside the catalog, one entry per asset. This is what the
+            // report lists instead of the .car itself: a catalog is a bundle, and a
+            // bundle tells you nothing about what it costs you. The .car stays in `top`
+            // so the download total still counts its compressed size.
+            //
+            // Display only. `SizeOnDisk` is the rendition's size after the catalog has
+            // been expanded, so these are uncompressed and must not reach `top` or
+            // `resources`, which are compressed figures that feed `downloadSize`.
+            moduleSize.assetCatalogFiles[name, default: 0] += size
+
+            // Image totals are only meaningful for the recognised image types.
             let components = name.split(separator: ".")
             guard let ext = components.last else { continue }
             let fileExtension = String(ext).lowercased()
-
-            // `SizeOnDisk` is the rendition's size after the catalog is expanded, so
-            // these are installed-size figures. They used to be added to `imageSize`,
-            // `resources` and `top`, all of which record compressed sizes — which put
-            // an uncompressed number into the download total and overstated it by the
-            // catalog's compression ratio. `imageFileSize` is the uncompressed field,
-            // so that is the only one they belong in; the download side is carried by
-            // the .car entry the IPA listing adds.
-            //
-            // The sum is a breakdown of the catalog's contents, not the catalog itself:
-            // it omits catalog overhead and renditions whose names do not end in a
-            // recognised extension, so it does not reconcile to the .car on disk.
-            guard ["svg", "png", "pdf"].contains(fileExtension) else { continue }
-            moduleSize.imageFileSize += size
+            if ["svg", "png", "pdf"].contains(fileExtension) {
+                moduleSize.imageFileSize += size
+            }
         }
     }
     public init() {}

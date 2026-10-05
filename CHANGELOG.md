@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.3.1] - 2026-10-05
-
 ### Fixed
 
+- **Download size read "0 B" for statically linked modules.** A module with no container
+  in the IPA — the linker put its code inside the app binary, as with every Swift package
+  and every system `.tbd`/`.dylib` — has no compressed size of its own, so it had nothing
+  to report and said so with a zero. Most rows of a SwiftPM app are in this position, and
+  for an internal module it read as "this package is free" while its size sat in plain
+  sight a few lines below. Such modules now report their LinkMap size, which is a real
+  measurement of code the team owns. It is uncompressed, and the bytes are already inside
+  the app binary's compressed size, so **summing download sizes over-counts against the
+  IPA** — noted in the README, with `totalPackageSize` given as the figure to use when
+  the real download size is what matters. Per-module usefulness was preferred over a sum
+  that reconciles, since the per-module number is the actionable one.
 - **Asset catalogs were counted in the wrong units, overstating download size.** The
   `.car` itself was never added to the download total. In its place, `assetutil`'s
   per-asset figures — which report each rendition's size after the catalog has been
@@ -18,28 +27,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compiled catalog occupying 940 compressed bytes in the IPA was reported as 1,608.
   The error scales with how compressible the assets are, so the more PNGs an app had the
   worse its download figure got. The `.car` is now counted at its compressed size from
-  the archive listing, and the per-asset figures are recorded only as uncompressed image
-  detail. Download size now reconciles exactly with the sum of the IPA listing.
-- **Download size read "0 B" for statically linked modules.** A module with no container
-  in the IPA — the linker put its code inside the app binary — owns no compressed bytes of
-  its own, so its total is legitimately zero, but the report had no way to say so. Most
-  rows of a SwiftPM app are in this position, including every `.tbd` and `.dylib` stub, and
-  an owner's entire download bar collapsed to 0 B whenever all of its modules were static.
-  Such modules are now flagged during LinkMap processing and shown as "in app binary".
-  The numbers are unchanged: a module with a container still reports a real figure, and
-  sorting still uses the measured value, since a static module genuinely contributes
-  nothing to the download.
+  the archive listing, and the per-asset figures are recorded in a separate,
+  display-only field that feeds no total. Download size now reconciles exactly with the
+  sum of the IPA listing.
+- **The Insights tab no longer lists `.car` files as assets, and lists what is inside
+  them instead.** A catalog is a bundle, and a bundle tells you nothing about what it
+  costs. Every other file in the bundle — not just images — counts as an asset, so
+  `.strop`, `.json` and `.strings` now appear in "Largest Asset Files" where they
+  previously did not.
 
 ### Added
 
 - **`staticallyLinked`.** A per-module flag recording that a module has no container in
-  the IPA, so the report can explain a zero download figure instead of asserting one.
+  the IPA, which is what makes the download fallback above applicable.
+- **`assetCatalogFiles`.** The assets unpacked from a module's `.car` catalogs, keyed by
+  name. Display only, and deliberately excluded from every total, since the figures are
+  uncompressed.
 
 ### Changed
 
-- Test suite grown from 43 to 53, covering the asset catalog accounting and the
-  statically linked flag. The new tests were verified to fail against the previous
-  behaviour.
+- Test suite grown from 43 to 56, covering the asset catalog accounting, the catalog
+  listing, and the statically linked fallback. The new tests were verified to fail
+  against the previous behaviour.
 
 ## [1.3.0] - 2026-10-05
 

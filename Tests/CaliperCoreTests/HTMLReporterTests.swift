@@ -80,31 +80,25 @@ struct HTMLReporterTests {
         }
     }
 
-    /// The label is the whole point of the change: a module with no container reports
-    /// zero download bytes honestly, and the report has to say why rather than print
-    /// "0 B". Extract the real function and run it against a Swift-encoded module, so
-    /// the assertion covers the shipped template.
-    @Test("a statically linked module is labelled, not measured as zero")
-    func labelsStaticallyLinkedModules() throws {
+    /// A statically linked module has no compressed size, so the report's copy of the
+    /// download figure falls back to the module's LinkMap size rather than reporting
+    /// zero. Extracted from the generated template and run against a Swift-encoded
+    /// module, so this pins the shipped JavaScript to the Swift definition above.
+    @Test("the report's download figure matches the Swift total for a static module")
+    func downloadFigureMatchesForStaticModule() throws {
+        let encoded = ModuleSize(name: "Orchard")
+        encoded.staticallyLinked = true
+        encoded.binarySize = 35_730
+        let json = try #require(String(data: try JSONEncoder().encode(encoded), encoding: .utf8))
+
         let html = try html(for: #"{"modules":{}}"#)
         let script = try #require(Self.appScript(in: html))
         let body = try #require(
-            Self.functionBody(named: "formatModuleDownload", in: script),
-            "formatModuleDownload not found"
+            Self.functionBody(named: "calculateModuleDownload", in: script),
+            "calculateModuleDownload not found"
         )
 
-        func module(_ staticallyLinked: Bool) throws -> String {
-            let encoded = ModuleSize(name: "Gamma")
-            encoded.staticallyLinked = staticallyLinked
-            let json = try #require(
-                String(data: try JSONEncoder().encode(encoded), encoding: .utf8)
-            )
-            return try Self.evaluateString(body, argument: json, script: script)
-        }
-
-        #expect(try module(true) == "in app binary")
-        // A module with a container must still report a real figure.
-        #expect(try module(false) == "0 B")
+        #expect(try Self.evaluate(body, argument: json) == encoded.downloadSize)
     }
 
     /// `node` if it is on PATH, otherwise nil.

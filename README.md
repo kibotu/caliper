@@ -252,19 +252,40 @@ evidence behind it.
 An `Assets.car` is a single file in the IPA, so it counts towards the download size at
 exactly the compressed size `unzip -v` reports for it. `assetutil` is run as well, but
 what it reports is each rendition's size *after* the catalog has been expanded — an
-installed-size figure. Those per-asset numbers are recorded as image detail, not added to
-the download total, because they would otherwise be reported as compressed bytes and
-overstate the download by the catalog's compression ratio.
+installed-size figure. Those per-asset numbers are recorded separately, in
+`assetCatalogFiles`, and never added to any total, because treating them as compressed
+bytes would overstate the download by the catalog's compression ratio.
 
-The two need not reconcile to each other. The per-asset sum is a breakdown of the
-catalog's *contents*, so it omits catalog overhead and any rendition whose name does not
-end in a recognised extension. Compare `downloadSize` against the IPA listing and
-`installSize` against the unzipped app; treat the asset breakdown as a way of seeing
-which assets are expensive, not as a total.
+A catalog is a bundle, and a bundle tells you nothing about what it costs, so the report
+lists the assets *inside* it rather than listing the `.car` itself. That is what the
+**Largest Asset Files** chart on the Insights tab shows: every file in the bundle that is
+not compiled code — `.strop`, `.json`, `.strings`, images, and each unpacked catalog
+asset — with the `.car` omitted so the container does not appear alongside its own
+contents.
+
+The per-asset sum is a breakdown, not a total: it omits catalog overhead, so it will not
+reconcile to the `.car` on disk. Compare `downloadSize` against the IPA listing and
+`installSize` against the unzipped app.
 
 > Source files (`.swift`, `.cpp` and the rest) are never in the IPA — they are compiled
 > into the binary. LinkMap source-file sizes therefore contribute to install size only,
 > and cannot contribute to download size at all.
+
+### Statically linked modules
+
+A module with no container in the IPA — a Swift package linked straight into the app
+binary, or a system library such as `libdispatch.dylib` — has no compressed size of its
+own, so there is no download figure to measure. These are reported using their LinkMap
+size instead, which is uncompressed.
+
+That figure is real, but note what it means: the bytes are physically inside the app
+binary and are already counted in *its* compressed download size. **Summing download
+sizes across an app therefore over-counts against the IPA**, by the combined size of its
+statically linked modules. A SwiftPM-heavy app will show a total noticeably larger than
+the archive. This is a deliberate trade: a per-module figure you can act on is worth more
+here than a sum that reconciles, since the per-module number is what tells you which
+module to go and shrink. Use `totalPackageSize` — read straight from the IPA file — when
+you need the real download size of the app.
 
 ### Compressed vs Uncompressed
 
@@ -324,7 +345,8 @@ which assets are expensive, not as a total.
 | `resources` | object | File types with size and count |
 | `top` | object | Files in the module, keyed by path, with their compressed size. Excludes the main binary, which is reported as `binaryCompressedSize` |
 | `additionalOwners` | array | Co-owners, when an entry lists more than one |
-| `staticallyLinked` | bool | The module has no container in the IPA; its code is linked into the app binary. It owns no compressed bytes of its own, so the report shows "in app binary" rather than 0 B |
+| `staticallyLinked` | bool | The module has no container in the IPA; its code is linked into the app binary. It has no compressed size of its own, so `downloadSize` falls back to `binarySize` (uncompressed) rather than reporting 0 |
+| `assetCatalogFiles` | object | Assets unpacked from this module's `.car` catalogs, keyed by name, uncompressed. Display only — never part of any total |
 | `totalPackageSize` | bytes | IPA file size (compressed) |
 | `totalInstallSize` | bytes | Installed app size (uncompressed) |
 

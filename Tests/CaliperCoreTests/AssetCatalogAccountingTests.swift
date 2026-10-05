@@ -85,4 +85,33 @@ struct AssetCatalogAccountingTests {
         #expect(module.imageFileSize == 4096)
         #expect(module.downloadSize == 900)
     }
+
+    /// `assetCatalogFiles` is display-only. If it were ever summed into a total, an
+    /// uncompressed figure would leak back into the compressed accounting, which is the
+    /// defect this suite exists to prevent.
+    @Test("catalog contents are kept out of the totals")
+    func catalogContentsAreNotTotals() {
+        let module = ModuleSize(name: "Demo")
+        module.assetCatalogFiles["icon.png"] = 1608
+
+        #expect(module.downloadSize == 0)
+        #expect(module.installSize == 0)
+    }
+
+    @Test("catalog contents reach the report")
+    func catalogContentsAreEncoded() throws {
+        let module = ModuleSize(name: "Demo")
+        module.assetCatalogFiles["icon.png"] = 536
+        module.assetCatalogFiles["logo@2x.png"] = 1024
+
+        let json = try #require(
+            try JSONSerialization.jsonObject(
+                with: try JSONEncoder().encode(module)
+            ) as? [String: Any]
+        )
+        let catalog = try #require(json["assetCatalogFiles"] as? [String: Int])
+
+        #expect(catalog["icon.png"] == 536)
+        #expect(catalog["logo@2x.png"] == 1024)
+    }
 }

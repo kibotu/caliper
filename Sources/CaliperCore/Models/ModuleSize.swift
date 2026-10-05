@@ -28,6 +28,15 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     /// rather than the absence of one.
     public var staticallyLinked: Bool = false
     public var resources: [String: Resource] = [:]
+    /// Assets found inside this module's `.car` catalogs, keyed by rendition name.
+    ///
+    /// Display only, and never part of any total: these are `assetutil` figures for the
+    /// catalog *expanded*, so they are uncompressed and would corrupt the download
+    /// figure. The `.car` file itself is counted in `top` at its compressed size.
+    ///
+    /// Kept separate from `top` so the report can list what a catalog contains instead
+    /// of listing the catalog, which is only a container.
+    public var assetCatalogFiles: [String: Int64] = [:]
     public var top: [String: Int64] = [:]
     public var files: [FileSize] = []
     
@@ -74,7 +83,7 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     }
     
     public enum CodingKeys: String, CodingKey {
-        case name, owner, additionalOwners, `internal`, version, binarySize, binaryCompressedSize, imageSize, imageFileSize, proguard, staticallyLinked, resources, top, files
+        case name, owner, additionalOwners, `internal`, version, binarySize, binaryCompressedSize, imageSize, imageFileSize, proguard, staticallyLinked, resources, assetCatalogFiles, top, files
     }
 
     // MARK: - Canonical sizes
@@ -91,12 +100,24 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     /// The field is still called `proguard` on the wire, a name inherited from upstream Ruler.
     public var installSize: Int64 { proguard }
 
-    /// Size of this module inside the IPA, in bytes.
+    /// Size of this module as the user downloads it, in bytes.
     ///
-    /// The compressed size of the main binary plus every other file this module owns.
-    /// `binarySize` is deliberately excluded: with a LinkMap it holds uncompressed
-    /// output, so adding it would mix units in one number.
+    /// For a module with a container in the IPA this is the compressed size of its main
+    /// binary plus every other file it owns. `binarySize` is excluded, because with a
+    /// LinkMap it holds uncompressed output and would mix units in one number.
+    ///
+    /// A statically linked module has no container, so there is no compressed size to
+    /// report and the sum above is legitimately zero. Its code is inside the app binary,
+    /// which is why that zero was misleading: the module has a real, measured size —
+    /// the LinkMap's uncompressed symbol bytes — and showing it is more useful than
+    /// showing nothing. It is the same figure as `installSize` for such a module, and
+    /// summing downloads across an app will over-count against the IPA, because these
+    /// bytes are already inside the app binary's compressed size.
+    ///
+    /// The one-line summary: download size is compressed where a compressed size is
+    /// known, and the best available measurement otherwise.
     public var downloadSize: Int64 {
-        binaryCompressedSize + top.values.reduce(0, +)
+        if staticallyLinked { return binarySize }
+        return binaryCompressedSize + top.values.reduce(0, +)
     }
 }
