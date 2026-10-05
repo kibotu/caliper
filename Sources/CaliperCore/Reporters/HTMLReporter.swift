@@ -108,7 +108,7 @@ public struct HTMLReporter {
         
         .files-section { margin-top: 30px; }
         .files-section h4 { font-size: 16px; margin-bottom: 15px; color: #333; display: flex; align-items: center; gap: 10px; }
-        .files-section h4 .count-badge { background: #063773; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .count-badge { background: #063773; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
         .files-table { width: 100%; background: white; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0; }
         .files-table-header { display: grid; grid-template-columns: 1fr auto; gap: 15px; padding: 12px 15px; background: #f8f9fa; font-weight: 600; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e0e0e0; }
         .file-row { display: grid; grid-template-columns: 1fr auto; gap: 15px; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; transition: background 0.15s; align-items: center; }
@@ -118,7 +118,11 @@ public struct HTMLReporter {
         .file-size { color: #063773; font-weight: 600; font-size: 13px; text-align: right; white-space: nowrap; }
         
         .top-files { margin-top: 20px; }
-        .top-files h4 { font-size: 16px; margin-bottom: 15px; color: #333; }
+        .top-files h4 { font-size: 16px; margin-bottom: 15px; color: #333; display: flex; align-items: center; gap: 10px; }
+        /* The compressed size of the compiled catalog the rows beneath were unpacked
+           from. A note rather than a figure of its own: `top` already counts the .car in
+           the download total, and this is those same bytes, not an addition to them. */
+        .top-files h4 .catalog-note { color: #666; font-size: 12px; font-weight: 400; }
         .file-item { display: flex; justify-content: space-between; padding: 10px; background: white; margin-bottom: 5px; border-radius: 4px; font-size: 13px; border-left: 4px solid #e0e0e0; transition: all 0.2s; }
         .file-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .file-path { color: #666; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif; }
@@ -212,13 +216,22 @@ public struct HTMLReporter {
         <!-- Insights Tab -->
         <div id="insights" class="tab-content">
             <!-- Filter Controls -->
-            <div style="padding: 20px 30px; background: white; border-bottom: 1px solid #e0e0e0;">
+            <div style="padding: 20px 30px; background: white; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
                 <div class="filter-chips">
                     <div class="filter-chip active" data-filter="internal" onclick="toggleInsightsFilter('internal')">Internal</div>
                     <div class="filter-chip active" data-filter="external" onclick="toggleInsightsFilter('external')">External</div>
                 </div>
+                <!-- Download is what the user fetches, install is what lands on the
+                     device. Both readings of "size", and they differ by the app's
+                     compression ratio, so the page can show either. It drives the
+                     sections that have both figures; the ones that do not are labelled
+                     with their unit instead. -->
+                <select id="insightsSizeSelect" style="padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;">
+                    <option value="installSize">Size: Install (uncompressed)</option>
+                    <option value="downloadSize">Size: Download (compressed)</option>
+                </select>
             </div>
-            
+
             <!-- Top Offenders Dashboard -->
             <div style="padding: 30px; background: white; border-bottom: 1px solid #e0e0e0;">
                 <h2 style="font-size: 20px; color: #333; margin-bottom: 20px;">🔥 Top Offenders</h2>
@@ -228,33 +241,34 @@ public struct HTMLReporter {
                         <div id="topModulesChart"></div>
                     </div>
                     <div style="min-width: 0; overflow: hidden;">
-                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Source Files</h3>
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Source Files <span style="font-size: 11px; color: #999; font-weight: 400;">uncompressed</span></h3>
                         <div id="topFilesChart"></div>
                     </div>
                     <div style="min-width: 0; overflow: hidden;">
-                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Asset Files</h3>
-                        <div id="topAssetsChart"></div>
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Resources</h3>
+                        <div id="topResourcesChart"></div>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Treemap Visualization -->
             <div style="padding: 30px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">
                 <h2 style="font-size: 20px; color: #333; margin-bottom: 10px;">🗺️ App Size Treemap</h2>
                 <p style="color: #666; font-size: 14px; margin-bottom: 20px;">Interactive visualization of all modules sized proportionally. Click to explore.</p>
                 <div id="treemapChart" style="background: white; border-radius: 8px; overflow: hidden;"></div>
             </div>
-            
+
             <!-- Resource Type Breakdown -->
             <div style="padding: 30px; background: white; border-bottom: 1px solid #e0e0e0;">
                 <h2 style="font-size: 20px; color: #333; margin-bottom: 20px;">📦 Resource Type Breakdown</h2>
+                <p style="font-size: 12px; color: #999; margin: -10px 0 20px 0;">Compressed — the size each file contributes to the download. Per-type uncompressed figures are not recorded, so this section does not follow the size control above.</p>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; justify-items: center;">
                     <div style="width: 100%; max-width: 400px;">
                         <h3 style="font-size: 16px; color: #666; margin-bottom: 15px; text-align: center;">By Count</h3>
                         <div id="resourceCountChart"></div>
                     </div>
                     <div style="width: 100%; max-width: 400px;">
-                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px; text-align: center;">By Size (Install Size)</h3>
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px; text-align: center;">By Size (Compressed)</h3>
                         <div id="resourceSizeChart"></div>
                     </div>
                 </div>
@@ -396,7 +410,11 @@ public struct HTMLReporter {
             });
             renderInsights();
         }
-        
+
+        document.getElementById('insightsSizeSelect').addEventListener('change', (e) => {
+            setInsightsSizeBasis(e.target.value);
+        });
+
         function toggleOwnershipFilter(filter) {
             ownershipFilters[filter] = !ownershipFilters[filter];
             document.querySelectorAll('#ownership .filter-chip').forEach(chip => {
@@ -436,42 +454,67 @@ public struct HTMLReporter {
             return (isInternal && ownershipFilters.internal) || (!isInternal && ownershipFilters.external);
         }
         
-        // The files a module ships, as the module panel lists them.
+        // The files a module ships, split by kind, as the module panel lists them.
 //
-// A `.car` is omitted: it is a bundle, and its assets are listed individually instead,
-// so showing the container would show the same bytes twice — once as the catalog and
-// once as the images inside it. Directory entries are omitted too, since the archive
-// lists them at 0 B and "Assets.car 58.6 KB" next to a bare path with no extension is
-// noise rather than information.
-function renderAssetFiles(module) {
+// `top` holds the real files in the bundle. A `.car` is a compiled asset catalog, and a
+// directory entry is a 0 B artefact of the archive listing, so neither is a file worth
+// listing. The catalog's own contents are listed in its place instead, because a
+// container tells you nothing about what it costs.
+//
+// Two sections rather than one list with a marker on the catalog rows. A marker has to
+// be glued to the file name to be visible, and the name is what the type badge is
+// derived from: appending "(in catalog)" to "bus.svg" made the extension parse as
+// "svg (in catalog)", which matched nothing, so every asset lost its type and its
+// colour. Separate sections need no marker, so the name stays a name.
+function renderModuleResources(module) {
     const files = Object.entries(module.top || {})
         .filter(([path]) => !path.toLowerCase().endsWith('.car') && !path.endsWith('/'))
         .sort((a, b) => b[1] - a[1]);
-
-    // Catalogs the report could unpack are listed by their contents instead, so those
-    // have to appear somewhere or the module looks empty. Checked after the filter, not
-    // before: a module holding only a catalog has no `top` files left once the catalog
-    // itself is dropped, and returning early there rendered it blank.
     const catalog = Object.entries(module.assetCatalogFiles || {})
-        .map(([name, size]) => [`${name} (in catalog)`, size])
         .sort((a, b) => b[1] - a[1]);
 
-    const rows = [...catalog, ...files];
-    if (rows.length === 0) return '';
+    if (files.length === 0 && catalog.length === 0) return '';
 
     return `
+        ${files.length > 0 ? `
         <div class="top-files">
-            <h4>Asset Files <span class="count-badge">${rows.length}</span></h4>
-            ${rows.map(([path, size]) => {
-                const fileInfo = getFileTypeInfo(path);
-                return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
-            }).join('')}
-        </div>
+            <h4>Resources <span class="count-badge">${files.length}</span></h4>
+            ${files.map(renderResourceRow).join('')}
+        </div>` : ''}
+        ${catalog.length > 0 ? `
+        <div class="top-files">
+            <h4>
+                Asset Catalog
+                <span class="count-badge">${catalog.length}</span>
+                <span class="catalog-note">${compiledCatalogNote(module)}</span>
+            </h4>
+            ${catalog.map(renderResourceRow).join('')}
+        </div>` : ''}
     `;
 }
 
+function renderResourceRow([path, size]) {
+    const fileInfo = getFileTypeInfo(path);
+    return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
+}
+
+// The size of the compiled catalog these rows were unpacked from, at the compressed
+// size the IPA listing reports for it. That is the figure that reaches the download
+// total, and the rows beneath it are the same bytes expanded — so this is a note
+// explaining their unit, not a figure to add to them.
+function compiledCatalogNote(module) {
+    const compiled = Object.entries(module.top || {})
+        .filter(([path]) => path.toLowerCase().endsWith('.car'))
+        .reduce((sum, [, size]) => sum + (size || 0), 0);
+    return compiled > 0 ? `${formatBytes(compiled)} compiled` : 'compiled size unknown';
+}
+
 function getFileTypeInfo(filePath) {
-            const ext = filePath.split('.').pop().toLowerCase();
+            // A name with no dot has no extension. `split('.').pop()` hands back the whole
+            // name in that case, so a colour set named AccentColor was badged ACCENTCOLOR.
+            const name = filePath.split('/').pop();
+            const dot = name.lastIndexOf('.');
+            const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
             
             // Image files
             if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'heic', 'heif', 'webp', 'bmp', 'tiff', 'tif'].includes(ext)) {
@@ -507,8 +550,9 @@ function getFileTypeInfo(filePath) {
                 return { type: 'font', label: ext.toUpperCase(), class: 'file-type-font' };
             }
             
-            // Other files
-            return { type: 'other', label: ext.toUpperCase(), class: 'file-type-other' };
+            // Other files. A name with no extension is labelled by where it came from
+            // rather than by the name itself, which is not a file type.
+            return { type: 'other', label: ext ? ext.toUpperCase() : 'ASSET', class: 'file-type-other' };
         }
         
         function calculateModuleDownload(module) {
@@ -615,9 +659,11 @@ function getFileTypeInfo(filePath) {
                 const binaryPercent = maxSize > 0 ? (module.binarySize || 0) / maxSize * 100 : 0;
                 const imagePercent = maxSize > 0 ? (module.imageFileSize || 0) / maxSize * 100 : 0;
                 
-                // Resources section
+                // Resource breakdown by type. Named apart from the "Resources" list below,
+                // which is the resources themselves: the two are different things and one
+                // heading cannot carry both.
                 const resourcesHTML = Object.keys(module.resources || {}).length > 0 ? `
-                    <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resources</h4>
+                    <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resource Types</h4>
                     <div class="resources-grid">
                         ${Object.entries(module.resources).map(([type, res]) => `
                             <div class="resource-card">
@@ -629,8 +675,8 @@ function getFileTypeInfo(filePath) {
                     </div>
                 ` : '';
                 
-                // Top files from asset catalog
-                const topFilesHTML = renderAssetFiles(module);
+                // The module's resources, and its asset catalog's contents
+                const topFilesHTML = renderModuleResources(module);
                 
                 // Source files from LinkMap (show ALL files)
                 const sourceFiles = module.files || [];
@@ -1101,9 +1147,11 @@ function getFileTypeInfo(filePath) {
                 const binaryPercent = maxModuleSize > 0 ? (module.binarySize || 0) / maxModuleSize * 100 : 0;
                 const imagePercent = maxModuleSize > 0 ? (module.imageFileSize || 0) / maxModuleSize * 100 : 0;
                 
-                // Resources section
+                // Resource breakdown by type. Named apart from the "Resources" list below,
+                // which is the resources themselves: the two are different things and one
+                // heading cannot carry both.
                 const resourcesHTML = Object.keys(module.resources || {}).length > 0 ? `
-                    <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resources</h4>
+                    <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resource Types</h4>
                     <div class="resources-grid">
                         ${Object.entries(module.resources).map(([type, res]) => `
                             <div class="resource-card">
@@ -1115,8 +1163,8 @@ function getFileTypeInfo(filePath) {
                     </div>
                 ` : '';
                 
-                // Top files from asset catalog
-                const topFilesHTML = renderAssetFiles(module);
+                // The module's resources, and its asset catalog's contents
+                const topFilesHTML = renderModuleResources(module);
                 
                 // Source files from LinkMap
                 const sourceFiles = module.files || [];
@@ -1222,25 +1270,55 @@ function getFileTypeInfo(filePath) {
         // Insights renders once, on first visit. Declared here because `switchTab` runs
         // before the DOM-ready block below.
         let insightsRendered = false;
-        
+
+        // Which of the two size figures the Insights page is showing. Download is
+        // compressed and is what the user fetches; install is uncompressed and is what
+        // the device stores. Defaults to install, which is what the page showed before
+        // the control existed.
+        let insightsSizeBasis = 'installSize';
+
+        // A module's size in whichever unit the page is currently showing. Every section
+        // that has both figures reads this rather than picking one, so the control cannot
+        // leave two charts disagreeing about what they are measuring.
+        function moduleSizeForInsights(module) {
+            return insightsSizeBasis === 'downloadSize'
+                ? calculateModuleDownload(module)
+                : calculateModuleTotal(module);
+        }
+
+        function setInsightsSizeBasis(basis) {
+            if (insightsSizeBasis === basis) return;
+            insightsSizeBasis = basis;
+            // Before the first visit there is nothing on the page to redraw, and the
+            // render-once flag will pick the basis up when it does.
+            if (insightsRendered) renderInsights();
+        }
+
         // Insights Tab Functions
         function renderInsights() {
+            // Every chart appends its own tooltip to the body, and User Impact writes
+            // into a container it never cleared. Re-rendering therefore grew the DOM
+            // without bound, which is what the render-once guard was working around.
+            // The size control needs re-render, so clear both here.
+            d3.select('body').selectAll('.d3-tooltip').remove();
+            document.getElementById('userImpactSection').innerHTML = '';
+
             renderTopOffenders();
             renderTreemap();
             renderResourceBreakdown();
             renderUserImpact();
         }
-        
+
         // 1. Top Offenders Dashboard
         function renderTopOffenders() {
             const allModules = Object.values(data.modules);
-            
+
             // Apply insights filters
             const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
-            
+
             // Top 20 Modules by size
             const topModules = modules
-                .map(m => ({ name: m.name, size: calculateModuleTotal(m), owner: m.owner }))
+                .map(m => ({ name: m.name, size: moduleSizeForInsights(m), owner: m.owner }))
                 .sort((a, b) => b.size - a.size)
                 .slice(0, 20);
             
@@ -1259,40 +1337,55 @@ function getFileTypeInfo(filePath) {
             });
             const topFiles = allFiles.sort((a, b) => b.size - a.size).slice(0, 20);
             
-            // Top 20 Asset Files across all modules (excluding frameworks)
+            // Top 20 resources across all modules (excluding frameworks)
             //
-            // Everything in the bundle that is not compiled code counts as an asset,
-            // not just images. A `.car` is the exception: it is a bundle, and a bundle
-            // says nothing about what it costs, so the catalog is listed by its
-            // contents instead of by its own compressed size. Directory entries are
-            // excluded for the same reason — the archive lists them at 0 B.
-            const allAssets = [];
+            // Everything in the bundle that is not compiled code is a resource, not just
+            // images. Directory entries are excluded: the archive lists them at 0 B.
+            //
+            // A compiled asset catalog is the one resource that has two honest
+            // representations, and which one is correct depends on the unit in view.
+            // Download: the `.car` is one file in the archive, and its contents are not in
+            // the download at all, so the container is the figure. Install: the container
+            // is a bundle that says nothing about what it costs, and its renditions are
+            // the expanded bytes, so the contents are the figure. Listing both would
+            // count the same bytes twice in one chart, which is what this avoids.
+            //
+            // Non-catalog resources have only a compressed per-file figure — `top` records
+            // compressed sizes, and the sole uncompressed per-file numbers in the model
+            // are catalog renditions and images. So the toggle moves the catalog and
+            // leaves the rest of the list as it is.
+            const allResources = [];
+            const byDownload = insightsSizeBasis === 'downloadSize';
             modules.forEach(module => {
-                // Exclude external modules (frameworks) from asset files
+                // Exclude external modules (frameworks) from resource files
                 if (module.internal !== true) return;
 
                 if (module.top) {
                     Object.entries(module.top).forEach(([path, size]) => {
-                        if (path.toLowerCase().endsWith('.car') || path.endsWith('/')) return;
-                        allAssets.push({
+                        if (path.endsWith('/')) return;
+                        const isCatalog = path.toLowerCase().endsWith('.car');
+                        if (isCatalog && !byDownload) return;
+                        allResources.push({
                             name: path,
                             size: size,
-                            module: module.name
+                            module: module.name,
+                            catalog: isCatalog
                         });
                     });
                 }
 
-                if (module.assetCatalogFiles) {
+                if (!byDownload && module.assetCatalogFiles) {
                     Object.entries(module.assetCatalogFiles).forEach(([name, size]) => {
-                        allAssets.push({
+                        allResources.push({
                             name: name,
                             size: size,
-                            module: module.name
+                            module: module.name,
+                            inCatalog: true
                         });
                     });
                 }
             });
-            const topAssets = allAssets.sort((a, b) => b.size - a.size).slice(0, 20);
+            const topResources = allResources.sort((a, b) => b.size - a.size).slice(0, 20);
             
             // Render Top Modules Bar Chart
             renderHorizontalBarChart('topModulesChart', topModules, 'size', 'name', '#063773');
@@ -1300,8 +1393,8 @@ function getFileTypeInfo(filePath) {
             // Render Top Files Bar Chart
             renderHorizontalBarChart('topFilesChart', topFiles, 'size', 'name', '#e74c3c');
             
-            // Render Top Assets Bar Chart
-            renderHorizontalBarChart('topAssetsChart', topAssets, 'size', 'name', '#3498db');
+            // Render Top Resources Bar Chart
+            renderHorizontalBarChart('topResourcesChart', topResources, 'size', 'name', '#3498db');
         }
         
         function renderHorizontalBarChart(containerId, data, sizeKey, nameKey, color) {
@@ -1363,6 +1456,12 @@ function getFileTypeInfo(filePath) {
                     if (d.module) {
                         tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Module: ${escapeHtml(d.module)}</div>`;
                     }
+                    if (d.inCatalog) {
+                        tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">In compiled asset catalog, uncompressed</div>`;
+                    }
+                    if (d.catalog) {
+                        tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Compiled asset catalog, compressed</div>`;
+                    }
                     tooltip.html(tooltipContent)
                         .classed('visible', true)
                         .style('left', (event.pageX + 10) + 'px')
@@ -1423,14 +1522,22 @@ function getFileTypeInfo(filePath) {
             const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
             
             // Prepare hierarchical data
+            //
+            // The cell value follows the size control, and the tooltip's binary and
+            // asset figures follow it too. They used to be pinned to the uncompressed
+            // pair, which is only correct while the cell is uncompressed: showing a
+            // compressed cell total above an uncompressed breakdown is the same unit
+            // mismatch the module card had. Both pairs exist — `binarySize` is LinkMap
+            // output and `binaryCompressedSize` the archive listing, `imageFileSize` is
+            // uncompressed and `imageSize` compressed.
+            const byDownload = insightsSizeBasis === 'downloadSize';
             const treemapData = {
                 name: 'App',
                 children: modules.map(m => ({
                     name: m.name,
-                    value: calculateModuleTotal(m),
-                    // Uncompressed, to match the cell value, which is the install size.
-                    binarySize: m.binarySize || 0,
-                    imageSize: m.imageFileSize || 0,
+                    value: moduleSizeForInsights(m),
+                    binarySize: byDownload ? (m.binaryCompressedSize || 0) : (m.binarySize || 0),
+                    imageSize: byDownload ? (m.imageSize || 0) : (m.imageFileSize || 0),
                     owner: m.owner
                 }))
             };
@@ -1491,6 +1598,7 @@ function getFileTypeInfo(filePath) {
                         <div>Total: ${formatBytes(d.value)} (${percentage}%)</div>
                         <div>Binary: ${formatBytes(d.data.binarySize)}</div>
                         <div>Assets: ${formatBytes(d.data.imageSize)}</div>
+                        <div style="margin-top: 5px; color: #999;">${byDownload ? 'Compressed' : 'Uncompressed'}</div>
                         ${d.data.owner ? `<div style="margin-top: 5px; color: #ffd700;">Owner: ${escapeHtml(d.data.owner)}</div>` : ''}
                     `)
                     .classed('visible', true)
@@ -1554,11 +1662,10 @@ function getFileTypeInfo(filePath) {
             
             // Aggregate all resources
             const resourceStats = {};
-            
-            // Every category below is a compressed size, because `resources` records
-            // compressed sizes. Summing an uncompressed figure in here would make the
-            // "Other" residual absorb the unit mismatch instead of the unattributed
-            // files it is meant to represent.
+
+            // Every category below is a compressed size, because `resources` and
+            // `binaryCompressedSize` both record compressed sizes. The "Other" residual
+            // is measured against a compressed total to match — see below.
             let totalBinarySize = 0;
             let binaryModuleCount = 0;
             modules.forEach(m => {
@@ -1572,21 +1679,16 @@ function getFileTypeInfo(filePath) {
                 resourceStats['Binary'] = { size: totalBinarySize, count: binaryModuleCount };
             }
 
-            // Add images
-            let totalImageSize = 0;
-            let imageFileCount = 0;
-            modules.forEach(m => {
-                totalImageSize += m.imageSize || 0;
-                // Count individual image files from asset catalog
-                if (m.top) {
-                    imageFileCount += Object.keys(m.top).length;
-                }
-            });
-            if (totalImageSize > 0) {
-                resourceStats['Images'] = { size: totalImageSize, count: imageFileCount };
-            }
-            
-            // Add other resources (fonts, PDFs, etc.)
+            // Add every resource by type: images, fonts, plists, PDFs and the rest.
+            //
+            // There is no separate "Images" rollup, and there could not be a correct
+            // one. `imageSize` is accumulated from the same files that also populate
+            // `resources['png']`, `resources['jpg']` and so on, at the same compressed
+            // size — so an Images category summed the same bytes a second time and
+            // inflated the donut's total past the app's real size. Its count was worse:
+            // it counted every key in `top`, which is every file in the bundle whatever
+            // its type. The per-type breakdown already separates the image formats, and
+            // it carries the counts those formats actually have.
             modules.forEach(module => {
                 Object.entries(module.resources || {}).forEach(([type, res]) => {
                     if (!resourceStats[type]) {
@@ -1596,21 +1698,31 @@ function getFileTypeInfo(filePath) {
                     resourceStats[type].count += res.count;
                 });
             });
-            
+
             const resourceData = Object.entries(resourceStats).map(([type, stats]) => ({
                 type,
                 size: stats.size,
                 count: stats.count
             }));
-            
-            // Calculate the actual total for filtered modules
-            const calculatedTotal = modules.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
+
+            // The total the residual is measured against has to be in the same unit as
+            // the categories, which are all compressed. This used to be
+            // `calculateModuleTotal` — uncompressed install size — so "Other" absorbed
+            // the app's entire compression delta rather than the files no category
+            // claimed, and on a typical app that was the largest wedge in the chart.
+            //
+            // A statically linked module is excluded: it has no compressed size of its
+            // own, because the linker put its code inside the app binary, which is
+            // already counted once under Binary. Its `downloadSize` is the uncompressed
+            // LinkMap fallback, so including it would add its entire code size to the
+            // residual.
+            const compressedModules = modules.filter(m => m.staticallyLinked !== true);
+            const calculatedTotal = compressedModules.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
             const resourceTotal = resourceData.reduce((sum, r) => sum + r.size, 0);
-            
-            // Anything not covered by a named category above lands in "Other". This
-            // used to be computed as the residual between the module total and the
-            // sum of resource categories, which silently absorbed double-counting in
-            // calculateModuleTotal instead of reporting it.
+
+            // Anything not covered by a named category above lands in "Other": the
+            // `.car` files and the untyped remainder, neither of which `resources`
+            // records.
             if (calculatedTotal > resourceTotal) {
                 const otherSize = calculatedTotal - resourceTotal;
                 if (otherSize > 0) {
@@ -1838,12 +1950,13 @@ function getFileTypeInfo(filePath) {
                                 <div style="font-size: 14px; color: #666; font-weight: 600;">${net.name}</div>
                             </div>
                             <div style="font-size: 32px; font-weight: bold; color: ${net.color}; margin-bottom: 5px;">${formatTime(net.time)}</div>
-                            <div style="font-size: 12px; color: #999;">Download time for ${formatBytes(downloadSize)}</div>
+                            <div style="font-size: 12px; color: #999;">Download time for ${formatBytes(downloadSize)}, compressed</div>
                         </div>
                     `).join('')}
                 </div>
-                
+
                 <h3 style="font-size: 16px; color: #333; margin-bottom: 15px;">📱 iPhone Storage Impact</h3>
+                <p style="font-size: 12px; color: #999; margin: -8px 0 15px 0;">Uncompressed, of ${formatBytes(installSize)} installed. This section does not follow the size control: a transfer happens over the compressed IPA and an install occupies the uncompressed one, so each card has only one honest figure.</p>
                 <div style="background: white; padding: 25px; border-radius: 8px;">
                     ${storagePercentages.map(storage => `
                         <div style="margin-bottom: 20px;">
