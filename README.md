@@ -149,7 +149,7 @@ Track which team owns which modules:
 **Multiple owners:**
 
 A module can belong to more than one team. Use `owners` for a list; the first entry is the
-primary owner and the rest are reported as `additionalOwners`:
+primary owner and the rest are co-owners:
 
 ```yaml
 - identifier: "SharedUI"
@@ -157,6 +157,24 @@ primary owner and the rest are reported as `additionalOwners`:
     - ui-team
     - design-systems
 ```
+
+Every owner is badged on the module card, co-owners in a lighter gradient, and each badge
+filters the Breakdown tab to that team. The `All teams` dropdown beside the search box is
+the same filter: it offers every team named anywhere in the report, including teams that
+only ever co-own something, and filtering matches on any owner rather than the primary
+alone — so a shared module stays visible to each team that owns it.
+
+**The Ownership tab counts shared modules twice, on purpose.** Its chart groups by primary
+owner, so the teams partition the app and the bars add up to it. The per-team list below
+counts a shared module in full for every team that owns it, so those totals add up to more
+than the app. There is no honest way to split a framework's bytes between two teams, so
+the list over-counts rather than inventing a share. Compare the chart against the app total,
+and read the list as "what this team is responsible for".
+
+**Note:** The main app module is automatically tagged with `owner: "App"` and `internal: true`
+even without an ownership file. An ownership file that writes `owners: [app, ...]` therefore
+produces two teams differing only in case, and both appear in the team filter. Write `App`
+in the file if you want it to be the same team.
 
 **Pattern syntax:**
 - `*` = any characters
@@ -167,8 +185,6 @@ primary owner and the rest are reported as `additionalOwners`:
 
 Everything that is not a wildcard is matched literally, so `Foundation.tbd` matches only
 itself. The **first** matching entry wins, so put specific patterns above general ones.
-
-**Note:** The main app module is automatically tagged with `owner: "App"` and `internal: true` even without an ownership file.
 
 ### With Package Versions
 
