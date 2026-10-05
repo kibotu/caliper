@@ -15,10 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--output-dir`.** Reports are no longer forced into the current directory.
 - **Multiple owners.** An ownership entry may use `owners: [a, b]` as well as `owner: a`.
   The first entry is reported as `owner`, the rest as a new `additionalOwners` field.
-- **Test suite.** 35 tests over the LinkMap parser, ownership matching and service
-  behaviour, and the HTML reporter. `Package.swift` now has a `CaliperCore` library
-  target and a `CaliperCoreTests` test target; analysis code moved out of the executable.
-  `swift test` runs in CI.
+- **`binaryCompressedSize`.** A new per-module field carrying the compressed size of the
+  main binary, which `binarySize` cannot hold once a LinkMap overwrites it.
+- **Test suite.** 43 tests over the LinkMap parser, ownership matching and service
+  behaviour, the module size totals, and the HTML reporter. `Package.swift` now has a
+  `CaliperCore` library target and a `CaliperCoreTests` test target; analysis code moved
+  out of the executable. `swift test` runs in CI.
 
 ### Changed
 
@@ -27,15 +29,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an air-gapped runner, or from a downloaded CI artifact. Previously every chart rendered
   empty when that request failed.
 - Module totals read a single canonical install size instead of being recomputed in
-  JavaScript.
+  JavaScript, and a test now pins the report's copy of that arithmetic to the Swift
+  definition.
 
 ### Fixed
 
 - **Dead-stripped symbols were counted.** A `# Dead stripped symbols:` section did not end
   the symbol section, so the linker-removed bytes of every module that defined one were
   added to its total.
+- **Download size was zero for most modules.** The total was computed from the per-file
+  list, which deliberately omits the main binary, so a framework that ships nothing but a
+  binary reported no download bytes. The compressed binary size is now recorded
+  separately as `binaryCompressedSize` and counted.
+- Per-module "download size" was documented as `binarySize`, which is uncompressed LinkMap
+  output. It now uses the modules' real compressed file sizes.
+- **The Download column contradicted its own sort.** The module card displayed
+  `binarySize` while the list was sorted on a different figure. Both now read the same
+  function, as does the Ownership tab, which had the same split.
 - **Images were double-counted.** Module totals added `imageFileSize` and `resources`
   together, but the parsers record each image in both. Every image counted twice.
+- **The resource breakdown mixed units.** Categories are recorded compressed, but the
+  Binary and Images rows were summed from uncompressed figures, so the "Other" residual
+  absorbed the mismatch instead of the unattributed files it represents.
+- Treemap percentages divided a module's size by the whole-app total, understating every
+  cell whenever a filter hid modules. They are now relative to what the treemap draws.
 - **Ownership patterns treated `.` as a wildcard.** `Foundation.tbd` also matched
   `FoundationXtbd`. Identifiers are now escaped before `*` and `?` are translated.
 - **Package versions were assigned non-deterministically.** Version matching iterated a
@@ -49,11 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name could break out of the script element.
 - `switchTab` relied on the implicit global `event`, which fails under strict mode.
 - Clicking the Insights tab re-rendered every chart each time and appended a new set of
-  tooltip elements, growing the DOM without bound. It now renders once.
-- Treemap percentages divided a module's size by the whole-app total, understating every
-  cell whenever a filter hid modules. They are now relative to what the treemap draws.
-- Per-module "download size" was documented as `binarySize`, which is uncompressed LinkMap
-  output. It now uses the modules' real compressed file sizes.
+  tooltip elements, growing the DOM without bound. It now renders once, from `switchTab`,
+  with the guard set before the render is scheduled so a second click cannot queue a
+  duplicate.
+- The vendored d3 bundle shipped without its ISC licence text. `LICENSE-d3.txt` now sits
+  beside it and is copied into the resource bundle.
+- `finalizeTop()` sorted the file dictionary into a fresh dictionary, discarding the
+  ordering it had just computed. It is now a no-op; consumers sort at display time.
 - A duplicate `moduleName` in a package-mapping file crashed via
   `Dictionary(uniqueKeysWithValues:)`. It now warns and keeps the first entry.
 - The unzipped IPA directory is created next to the IPA rather than in the working

@@ -297,12 +297,13 @@ evidence behind it.
 
 | Field | Unit | Description |
 |-------|------|-------------|
-| `binarySize` | bytes | Compiled code size (from LinkMap) |
+| `binarySize` | bytes | Compiled code size (from LinkMap, so uncompressed; the IPA's compressed size without one) |
+| `binaryCompressedSize` | bytes | Compressed size of the main binary, straight from the IPA |
 | `imageSize` | bytes | Compressed image assets in IPA |
 | `imageFileSize` | bytes | Uncompressed image assets |
 | `proguard` | bytes | Total uncompressed module size |
 | `resources` | object | File types with size and count |
-| `top` | object | Files in the module, keyed by path, with their compressed size |
+| `top` | object | Files in the module, keyed by path, with their compressed size. Excludes the main binary, which is reported as `binaryCompressedSize` |
 | `additionalOwners` | array | Co-owners, when an entry lists more than one |
 | `totalPackageSize` | bytes | IPA file size (compressed) |
 | `totalInstallSize` | bytes | Installed app size (uncompressed) |

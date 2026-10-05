@@ -19,8 +19,8 @@ public struct PackageMappingService {
     /// Build a dictionary from module names to package identities.
     ///
     /// A repeated `moduleName` is a user error, and `Dictionary(uniqueKeysWithValues:)`
-    /// would trap on it. Last one wins, with a warning, so a typo in a mapping file
-    /// degrades to a diagnostic instead of a crash.
+    /// would trap on it. The first entry wins, with a warning, so a typo in a mapping
+    /// file degrades to a diagnostic instead of a crash.
     public func buildMappingDictionary(from mappings: [PackageNameMapping]) -> [String: String] {
         var result: [String: String] = [:]
         for mapping in mappings {

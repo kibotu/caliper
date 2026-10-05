@@ -258,6 +258,9 @@ public struct IPAParser {
             let isMainBinary = containerName != nil && filePath.hasSuffix(containerName!)
             if isMainBinary {
                 moduleSize.binarySize = compressedSize
+                // `binarySize` gets overwritten with uncompressed LinkMap output later,
+                // so keep the compressed figure separately for the download-size total.
+                moduleSize.binaryCompressedSize = compressedSize
                 // Breadcrumb: Log main binary detection
                 fputs("  [Binary] Detected main binary: \(containerName ?? "unknown") (\(compressedSize) bytes)\n", stderr)
                 // Don't add the main binary to top files - it's already analyzed via linkmap

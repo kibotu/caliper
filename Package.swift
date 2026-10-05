@@ -27,7 +27,8 @@ let package = Package(
             // opens offline, on an air-gapped CI runner, and from a downloaded
             // artifact. See Resources/d3.v7.min.js.
             resources: [
-                .copy("Resources/d3.v7.min.js")
+                .copy("Resources/d3.v7.min.js"),
+                .copy("Resources/LICENSE-d3.txt"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),

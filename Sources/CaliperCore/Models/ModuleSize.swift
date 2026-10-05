@@ -10,6 +10,13 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     public var `internal`: Bool?
     public var version: String?
     public var binarySize: Int64 = 0
+    /// Compressed size of the main binary, straight from the IPA listing.
+    ///
+    /// `binarySize` is overwritten with uncompressed LinkMap output when a LinkMap is
+    /// supplied, so it cannot serve as the compressed figure. Without this, a module
+    /// that ships nothing but a binary has an empty `top` and therefore reports zero
+    /// download bytes — which is most frameworks in a real app.
+    public var binaryCompressedSize: Int64 = 0
     public var imageSize: Int64 = 0
     public var imageFileSize: Int64 = 0
     public var proguard: Int64 = 0
@@ -35,13 +42,12 @@ public final class ModuleSize: Codable, @unchecked Sendable {
         top[file] = size
     }
     
-    /// Finalize the top files list (sort by size)
-    public func finalizeTop() {
-        // `Dictionary(uniqueKeysWithValues:)` traps on a duplicate key. `top` cannot
-        // have one, but building it by assignment keeps that precondition out of a
-        // method that would otherwise be a crash waiting on an unrelated change.
-        top = top.sorted { $0.value > $1.value }.reduce(into: [:]) { $0[$1.key] = $1.value }
-    }
+    /// Finalize the top files list.
+    ///
+    /// A dictionary has no order, so there is nothing to finalize: consumers sort by
+    /// value at the point of display. The previous implementation sorted into a fresh
+    /// dictionary, which discarded the ordering it had just computed.
+    public func finalizeTop() {}
     
     /// Add file size information
     public func addFileSize(fileName: String, size: Int64) {
@@ -61,7 +67,7 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     }
     
     public enum CodingKeys: String, CodingKey {
-        case name, owner, additionalOwners, `internal`, version, binarySize, imageSize, imageFileSize, proguard, resources, top, files
+        case name, owner, additionalOwners, `internal`, version, binarySize, binaryCompressedSize, imageSize, imageFileSize, proguard, resources, top, files
     }
 
     // MARK: - Canonical sizes
@@ -80,10 +86,10 @@ public final class ModuleSize: Codable, @unchecked Sendable {
 
     /// Size of this module inside the IPA, in bytes.
     ///
-    /// Sum of the compressed sizes of the files this module owns. `binarySize` is
-    /// deliberately excluded: it is uncompressed LinkMap output, so adding it here would
-    /// mix compressed and uncompressed figures in one number.
+    /// The compressed size of the main binary plus every other file this module owns.
+    /// `binarySize` is deliberately excluded: with a LinkMap it holds uncompressed
+    /// output, so adding it would mix units in one number.
     public var downloadSize: Int64 {
-        top.values.reduce(0, +)
+        binaryCompressedSize + top.values.reduce(0, +)
     }
 }

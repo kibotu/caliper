@@ -36,7 +36,7 @@ public struct HTMLReporter {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App Size Report</title>
-    <script>/* d3 v7.9.0, vendored so this report works offline. */__D3__</script>
+    <script>/* d3 v7.9.0, vendored so this report works offline. ISC licensed, (c) Mike Bostock. */__D3__</script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif; background: #f5f5f5; padding: 20px; line-height: 1.6; }
@@ -350,6 +350,16 @@ public struct HTMLReporter {
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             if (el) el.classList.add('active');
             document.getElementById(tabName).classList.add('active');
+
+            // The Insights charts are static, so render them once. Re-rendering on every
+            // visit appended a fresh set of tooltip elements each time, growing the DOM
+            // without bound. The flag is set before the timer is scheduled, so a second
+            // click while this one is pending cannot queue a duplicate render.
+            if (tabName === 'insights' && !insightsRendered) {
+                insightsRendered = true;
+                // Wait for the tab to become visible so the charts can measure it.
+                setTimeout(renderInsights, 100);
+            }
         }
         
         function formatBytes(bytes) {
@@ -468,11 +478,16 @@ public struct HTMLReporter {
         }
         
         function calculateModuleDownload(module) {
-            // Compressed size of the files this module owns. `binarySize` is LinkMap
-            // output and is therefore uncompressed, so it is deliberately excluded
-            // rather than mixed in under the heading of a download-size figure.
-            if (!module.top) return 0;
-            return Object.values(module.top).reduce((sum, v) => sum + (v || 0), 0);
+            // Compressed size of every file this module owns: the main binary plus the
+            // files in `top`. `binarySize` is excluded because with a LinkMap it holds
+            // uncompressed output, which would mix units in one figure.
+            //
+            // `binaryCompressedSize` is counted here because `top` deliberately omits
+            // the main binary, so a framework that ships nothing but a binary would
+            // otherwise report zero download bytes.
+            let total = (module.binaryCompressedSize || 0);
+            if (!module.top) return total;
+            return total + Object.values(module.top).reduce((sum, v) => sum + (v || 0), 0);
         }
 
         function calculateModuleTotal(module) {
@@ -491,12 +506,10 @@ public struct HTMLReporter {
             const totalInstallSize = data.totalInstallSize || 0;
             const allModules = Object.values(data.modules);
             const moduleCount = allModules.length;
-            const totalBinarySize = allModules.reduce((sum, m) => sum + (m.binarySize || 0), 0);
-            
+
             // Calculate internal totals
             const internalModules = allModules.filter(m => m.internal === true);
             const internalCount = internalModules.length;
-            const internalBinarySize = internalModules.reduce((sum, m) => sum + (m.binarySize || 0), 0);
             const internalInstallSize = internalModules.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
             
             // Download size is the sum of each module's compressed file sizes.
@@ -605,8 +618,12 @@ public struct HTMLReporter {
                     </div>
                 ` : '';
                 
-                // Determine which size to display based on current sort
-                const displaySize = currentSort === 'installSize' ? totalSize : (module.binarySize || 0);
+                // Determine which size to display based on current sort. The displayed figure
+                // must come from the same function the sort used, or the column
+                // contradicts its own ordering.
+                const displaySize = currentSort === 'installSize'
+                    ? calculateModuleTotal(module)
+                    : calculateModuleDownload(module);
                 const displayLabel = currentSort === 'installSize' ? 'Install' : 'Download';
                 
                 return `
@@ -710,25 +727,27 @@ public struct HTMLReporter {
             
             const ownerData = Object.entries(modulesByOwner).map(([ownerName, modules]) => {
                 const moduleList = Object.values(modules);
-                const totalBinarySize = moduleList.reduce((sum, m) => sum + (m.binarySize || 0), 0);
+                // Same two functions the breakdown tab uses, so an owner's totals
+                // agree with the module cards beneath them.
+                const totalDownloadSize = moduleList.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
                 const totalInstallSize = moduleList.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
                 const totalFiles = moduleList.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
-                
+
                 return {
                     name: ownerName,
                     modules: modules,
                     moduleCount: moduleList.length,
                     fileCount: totalFiles,
-                    totalBinarySize: totalBinarySize,
+                    totalDownloadSize: totalDownloadSize,
                     totalInstallSize: totalInstallSize
                 };
             });
-            
+
             // Sort based on selected metric
             if (sortBy === 'installSize') {
                 return ownerData.sort((a, b) => b.totalInstallSize - a.totalInstallSize);
             } else {
-                return ownerData.sort((a, b) => b.totalBinarySize - a.totalBinarySize);
+                return ownerData.sort((a, b) => b.totalDownloadSize - a.totalDownloadSize);
             }
         }
         
@@ -760,7 +779,7 @@ public struct HTMLReporter {
             const chartHeight = height - margin.top - margin.bottom;
             
             // Calculate totals for percentages
-            const totalBinarySize = ownershipData.reduce((sum, d) => sum + d.totalBinarySize, 0);
+            const totalDownloadSize = ownershipData.reduce((sum, d) => sum + d.totalDownloadSize, 0);
             const totalInstallSize = ownershipData.reduce((sum, d) => sum + d.totalInstallSize, 0);
             
             // Create tooltip
@@ -784,7 +803,7 @@ public struct HTMLReporter {
                 .range([0, width - margin.left - margin.right])
                 .padding(0.3);
             
-            const maxSize = d3.max(ownershipData, d => Math.max(d.totalBinarySize, d.totalInstallSize));
+            const maxSize = d3.max(ownershipData, d => Math.max(d.totalDownloadSize, d.totalInstallSize));
             const y = d3.scaleLinear()
                 .domain([0, maxSize])
                 .nice()
@@ -839,12 +858,12 @@ public struct HTMLReporter {
                 .attr('rx', 3)
                 .on('mouseover', function(event, d) {
                     d3.select(this).style('opacity', 0.7);
-                    const percentage = totalBinarySize > 0 ? ((d.totalBinarySize / totalBinarySize) * 100).toFixed(1) : 0;
+                    const percentage = totalDownloadSize > 0 ? ((d.totalDownloadSize / totalDownloadSize) * 100).toFixed(1) : 0;
                     tooltip.html(`
                         <div class="d3-tooltip-owner">${escapeHtml(d.name)}</div>
                         <div class="d3-tooltip-row">
                             <span class="d3-tooltip-color" style="background: #063773;"></span>
-                            <span>Download: ${formatBytes(d.totalBinarySize)} (${percentage}%)</span>
+                            <span>Download: ${formatBytes(d.totalDownloadSize)} (${percentage}%)</span>
                         </div>
                         <div class="d3-tooltip-row">
                             <span>${d.moduleCount} module(s)</span>
@@ -868,8 +887,8 @@ public struct HTMLReporter {
                 .transition()
                 .duration(800)
                 .ease(d3.easeCubicOut)
-                .attr('y', d => y(d.totalBinarySize))
-                .attr('height', d => chartHeight - y(d.totalBinarySize));
+                .attr('y', d => y(d.totalDownloadSize))
+                .attr('height', d => chartHeight - y(d.totalDownloadSize));
             
             // Install size bars (green)
             ownerGroups.append('rect')
@@ -1028,7 +1047,7 @@ public struct HTMLReporter {
                     <div style="font-size: 14px; color: #666; margin-top: 5px;">File(s)</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 36px; font-weight: bold; color: #063773;">${formatBytes(owner.totalBinarySize)}</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #063773;">${formatBytes(owner.totalDownloadSize)}</div>
                     <div style="font-size: 14px; color: #666; margin-top: 5px;">Download size</div>
                 </div>
                 <div style="text-align: center;">
@@ -1040,7 +1059,7 @@ public struct HTMLReporter {
             // Render modules
             const modulesGrid = document.getElementById('ownerModulesGrid');
             const modules = Object.entries(owner.modules).sort((a, b) => {
-                return (b[1].binarySize || 0) - (a[1].binarySize || 0);
+                return calculateModuleDownload(b[1]) - calculateModuleDownload(a[1]);
             });
             
             const maxModuleSize = Math.max(...modules.map(([_, m]) => calculateModuleTotal(m)));
@@ -1107,7 +1126,7 @@ public struct HTMLReporter {
                             <div class="module-stats">
                                 <div class="module-stat">
                                     <span class="module-stat-label">Download</span>
-                                    <span class="module-size">${formatBytes(module.binarySize || 0)}</span>
+                                    <span class="module-size">${formatBytes(calculateModuleDownload(module))}</span>
                                 </div>
                                 <span class="expand-icon" id="owner-module-icon-${ownerIndex}-${index}">▼</span>
                             </div>
@@ -1177,22 +1196,9 @@ public struct HTMLReporter {
         renderOwnershipChart();
         populateOwnerDropdown(true); // Auto-select "App" on initial page load
         
-        // Initialize the Insights tab the first time it is opened. Re-rendering on
-        // every click re-appended a set of tooltip elements each time, which grew
-        // without bound; the charts are static, so rendering once is enough. Filter
-        // chips inside the tab call renderInsights themselves.
+        // Insights renders once, on first visit. Declared here because `switchTab` runs
+        // before the DOM-ready block below.
         let insightsRendered = false;
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', function() {
-                if (this.textContent.trim() === 'Insights' && !insightsRendered) {
-                    // Wait for the tab to become visible so the charts can measure it.
-                    setTimeout(function() {
-                        renderInsights();
-                        insightsRendered = true;
-                    }, 100);
-                }
-            });
-        });
         
         // Insights Tab Functions
         function renderInsights() {
@@ -1380,6 +1386,7 @@ public struct HTMLReporter {
                 children: modules.map(m => ({
                     name: m.name,
                     value: calculateModuleTotal(m),
+                    // Uncompressed, to match the cell value, which is the install size.
                     binarySize: m.binarySize || 0,
                     imageSize: m.imageFileSize || 0,
                     owner: m.owner
@@ -1506,11 +1513,14 @@ public struct HTMLReporter {
             // Aggregate all resources
             const resourceStats = {};
             
-            // Add binary as a resource type
+            // Every category below is a compressed size, because `resources` records
+            // compressed sizes. Summing an uncompressed figure in here would make the
+            // "Other" residual absorb the unit mismatch instead of the unattributed
+            // files it is meant to represent.
             let totalBinarySize = 0;
             let binaryModuleCount = 0;
             modules.forEach(m => {
-                const binarySize = m.binarySize || 0;
+                const binarySize = m.binaryCompressedSize || 0;
                 if (binarySize > 0) {
                     totalBinarySize += binarySize;
                     binaryModuleCount++;
@@ -1519,12 +1529,12 @@ public struct HTMLReporter {
             if (totalBinarySize > 0) {
                 resourceStats['Binary'] = { size: totalBinarySize, count: binaryModuleCount };
             }
-            
+
             // Add images
             let totalImageSize = 0;
             let imageFileCount = 0;
             modules.forEach(m => {
-                totalImageSize += m.imageFileSize || 0;
+                totalImageSize += m.imageSize || 0;
                 // Count individual image files from asset catalog
                 if (m.top) {
                     imageFileCount += Object.keys(m.top).length;
