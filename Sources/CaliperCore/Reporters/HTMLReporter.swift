@@ -509,6 +509,30 @@ function compiledCatalogNote(module) {
     return compiled > 0 ? `${formatBytes(compiled)} compiled` : 'compiled size unknown';
 }
 
+// How a catalog is named when it has to appear as a single entry rather than a list of
+// its contents. The path on its own reads as a file, and a file is the wrong thing to
+// point someone at: the entry is a container, and saying so is what keeps it from being
+// mistaken for something that can be deleted.
+//
+// The container's extension is dropped because the chart's axis truncates labels to
+// about twenty characters, and `ProfisBus.bundle asset catalog` loses the one word that
+// says what the row is. The full path is in the tooltip either way.
+function catalogLabel(carPath) {
+    const parts = carPath.split('/').filter(Boolean);
+    const container = parts.length >= 2 ? parts[parts.length - 2] : 'app';
+    const dot = container.lastIndexOf('.');
+    return `${dot > 0 ? container.slice(0, dot) : container} catalog`;
+}
+
+// How many assets a module's catalog holds. This is the module's total across all of
+// its catalogs, not a per-catalog count, because `assetCatalogFiles` is a flat dictionary
+// keyed by rendition name. A module with one catalog — the usual shape, since a bundle
+// ships one `Assets.car` — is exact. A module with two reports the sum, which is the
+// number that would be actionable anyway.
+function catalogAssetCount(module) {
+    return Object.keys(module.assetCatalogFiles || {}).length;
+}
+
 function getFileTypeInfo(filePath) {
             // A name with no dot has no extension. `split('.').pop()` hands back the whole
             // name in that case, so a colour set named AccentColor was badged ACCENTCOLOR.
@@ -1342,13 +1366,21 @@ function getFileTypeInfo(filePath) {
             // Everything in the bundle that is not compiled code is a resource, not just
             // images. Directory entries are excluded: the archive lists them at 0 B.
             //
-            // A compiled asset catalog is the one resource that has two honest
+            // A compiled asset catalog is the one resource with two honest
             // representations, and which one is correct depends on the unit in view.
             // Download: the `.car` is one file in the archive, and its contents are not in
             // the download at all, so the container is the figure. Install: the container
-            // is a bundle that says nothing about what it costs, and its renditions are
-            // the expanded bytes, so the contents are the figure. Listing both would
-            // count the same bytes twice in one chart, which is what this avoids.
+            // says nothing about what it costs, and the renditions are the expanded bytes,
+            // so the contents are the figure. Listing both would count the same bytes
+            // twice in one chart, which is what this avoids.
+            //
+            // Neither is a list of files, and the compressed case used to be a plain
+            // container row: `Payload/…/ProfisBus.bundle/Assets.car` at 58.6 KB says a
+            // catalog exists and what it cost, which is nothing anyone can act on. So
+            // compressed, it is one row per catalog carrying the asset count — 12 assets
+            // for 58.6 KB is a catalog worth opening, 400 for the same is not. Uncompressed,
+            // the renditions are listed individually, because that is where the actionable
+            // names are.
             //
             // Non-catalog resources have only a compressed per-file figure — `top` records
             // compressed sizes, and the sole uncompressed per-file numbers in the model
@@ -1363,13 +1395,22 @@ function getFileTypeInfo(filePath) {
                 if (module.top) {
                     Object.entries(module.top).forEach(([path, size]) => {
                         if (path.endsWith('/')) return;
-                        const isCatalog = path.toLowerCase().endsWith('.car');
-                        if (isCatalog && !byDownload) return;
+                        if (!path.toLowerCase().endsWith('.car')) {
+                            allResources.push({
+                                name: path,
+                                size: size,
+                                module: module.name
+                            });
+                            return;
+                        }
+                        if (!byDownload) return;
                         allResources.push({
-                            name: path,
+                            name: catalogLabel(path),
                             size: size,
                             module: module.name,
-                            catalog: isCatalog
+                            catalog: true,
+                            path: path,
+                            assets: catalogAssetCount(module)
                         });
                     });
                 }
@@ -1460,7 +1501,12 @@ function getFileTypeInfo(filePath) {
                         tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">In compiled asset catalog, uncompressed</div>`;
                     }
                     if (d.catalog) {
-                        tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Compiled asset catalog, compressed</div>`;
+                        // The label says this is a container, so the count is what makes
+                        // the row worth reading, and the path is where to go looking.
+                        tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Compiled asset catalog, ${d.assets} asset${d.assets === 1 ? '' : 's'}, compressed</div>`;
+                        if (d.path) {
+                            tooltipContent += `<div style="margin-top: 5px; color: #999; word-break: break-all;">${escapeHtml(d.path)}</div>`;
+                        }
                     }
                     tooltip.html(tooltipContent)
                         .classed('visible', true)
@@ -1493,7 +1539,10 @@ function getFileTypeInfo(filePath) {
                     return name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
                 })
                 .append('title')
-                .text(d => d[nameKey]);
+                // A catalog row is labelled as a container, so its native tooltip shows
+                // the path it was collapsed from — otherwise the label reads as a name
+                // that does not exist anywhere in the bundle.
+                .text(d => d.path || d[nameKey]);
             
             // Size labels
             g.selectAll('.size-label')
