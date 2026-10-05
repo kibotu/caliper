@@ -59,6 +59,69 @@ struct ModuleSizeTotalsTests {
     }
 }
 
+/// A module the IPA parser never produced has no container of its own — the linker put
+/// its code inside the app binary — so it owns no compressed bytes and its download
+/// total is legitimately zero. The report has to be able to tell that apart from a
+/// module that genuinely measures zero, which is what `staticallyLinked` records.
+@Suite("Statically linked modules")
+struct StaticallyLinkedTests {
+
+    /// The IPA parser finds every module that ships a container. These stand in for
+    /// what it produces: a framework, and a resource bundle with no binary.
+    private func ipaModules() -> [String: ModuleSize] {
+        let framework = ModuleSize(name: "Alpha")
+        framework.binaryCompressedSize = 4096
+
+        let bundle = ModuleSize(name: "Beta")
+        bundle.addToTop(file: "Payload/Beta.bundle/Assets.car", size: 1024)
+
+        return ["Alpha": framework, "Beta": bundle]
+    }
+
+    @Test("a module created from LinkMap alone is flagged as statically linked")
+    func flagsLinkMapOnlyModules() {
+        var report = ipaModules()
+
+        SizeCalculator().updateBinarySizes(in: &report, moduleSizes: ["Alpha": 9000, "Gamma": 7000])
+
+        // Gamma never appeared in the IPA, so its code lives in the app binary.
+        #expect(report["Gamma"]?.staticallyLinked == true)
+        // It therefore owns no compressed bytes of its own.
+        #expect(report["Gamma"]?.downloadSize == 0)
+    }
+
+    @Test("a module that ships a container is not flagged")
+    func leavesContaineredModulesUnflagged() {
+        var report = ipaModules()
+
+        SizeCalculator().updateBinarySizes(in: &report, moduleSizes: ["Alpha": 9000, "Beta": 8000])
+
+        // Both came from the IPA, so both have compressed bytes to report.
+        #expect(report["Alpha"]?.staticallyLinked == false)
+        #expect(report["Beta"]?.staticallyLinked == false)
+        #expect(report["Alpha"]?.downloadSize == 4096)
+        #expect(report["Beta"]?.downloadSize == 1024)
+    }
+
+    @Test("the flag is absent for a module that was never linked")
+    func defaultsToFalse() {
+        #expect(ModuleSize(name: "Alpha").staticallyLinked == false)
+    }
+
+    @Test("the flag reaches the report")
+    func isEncoded() throws {
+        let module = ModuleSize(name: "Gamma")
+        module.staticallyLinked = true
+
+        let data = try JSONEncoder().encode(module)
+        let json = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        #expect(json["staticallyLinked"] as? Bool == true)
+    }
+}
+
 /// `installSize` and `downloadSize` are the single source of truth for the report,
 /// so they have to survive the JSON round trip the HTML file is built from.
 @Suite("ModuleSize encoding")
