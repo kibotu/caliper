@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-05
+
+### Fixed
+
+- **A framework binary whose name ends in a resource extension was read as a resource.**
+  A framework's executable is named after the framework, so it can legitimately end in
+  `.json`, `.plist`, `.strings` and the rest. The extension switch ran first, so
+  `Data.framework/Data.json` was filed as a 90 KB JSON payload and the framework's binary
+  size stayed at 0 B. The binary is now identified before its extension is considered.
+  The check compares the filename without its extension against the container name — a
+  plain suffix comparison cannot match `"Data.json"` against `Data`, which is exactly the
+  case that went wrong.
+- **A framework's container directory could overwrite its binary size with 0 B.** The
+  archive lists both `Foo.framework/` and `Foo.framework/Foo`, and both reduce to the
+  same name, so a name comparison alone cannot tell them apart. Directory entries are now
+  excluded. Archive ordering is not stable across IPA builds, so this could appear and
+  disappear between runs on the same binary.
+- **`.car` files were still listed in the module panel.** The Insights chart already
+  listed a catalog's contents instead of the catalog, but a module's own "Asset Files"
+  list had not been changed, so `C24ProfisCraftsmen.bundle/Assets.car 58.6 KB` appeared
+  under a module whose only other file was a 4 B plist — the same bytes shown twice, once
+  as the container and once as the images inside it. Both panel sites duplicated that
+  markup; they now share one function, so the two views cannot drift again. Catalog
+  contents are listed in their place, and a module holding only a catalog is no longer
+  rendered blank.
+
+### Changed
+
+- **The release artifact could not produce an HTML report.** The HTML template and the
+  vendored d3 bundle live in `caliper_CaliperCore.bundle`, but the release workflow
+  uploaded only the `caliper` executable. Anyone who downloaded a release or installed
+  via Mint got `Fatal error: could not load resource bundle` before a report was written —
+  which is every install path the README documents. The bundle is now included. This
+  affected 1.3.0 through 1.3.2.
+- Test suite grown from 56 to 63, covering framework binary detection, container
+  directory entries, and the `.car` exclusion in the module panel. The new tests were
+  verified to fail against the previous behaviour.
+
+### Fixed
+
+- **A framework binary whose name ends in a resource extension was read as a resource.**
+  A framework's executable is named after the framework, so it can legitimately end in
+  `.json`, `.plist`, `.strings` and the rest. The extension switch ran first, so
+  `Data.framework/Data.json` was filed as a 90 KB JSON payload and the framework's
+  binary size stayed at 0 B. The binary is now identified before its extension is
+  considered. The check compares the filename without its extension against the
+  container name — a plain suffix comparison cannot match `"Data.json"` against `Data`,
+  which is exactly the case that went wrong.
+
+### Changed
+
+- The archive lists both `Foo.framework/` and `Foo.framework/Foo`, and both reduce to
+  the same name, so a name comparison alone cannot tell them apart. The container's own
+  directory entry was therefore eligible to be recorded as its binary at 0 bytes, which
+  would overwrite the real figure whenever the archive happened to list it last. It is
+  now excluded. The ordering is not stable across IPA builds, so this could appear and
+  disappear between runs on the same binary.
+
+### Added
+
+- 5 tests over framework parsing, covering the resource-extension case, the container
+  directory entry, a versioned `Versions/A` layout, and the resources that must still be
+  counted alongside a framework binary. Verified to fail against the previous behaviour.
+
 ## [1.3.2] - 2026-10-05
 
 ### Fixed

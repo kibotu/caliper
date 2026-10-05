@@ -209,18 +209,79 @@ struct HTMLReporterTests {
         argument: String,
         script: String
     ) throws -> String {
-        let helpers = try ["formatBytes", "calculateModuleDownload"]
+        let helpers = try ["formatBytes", "calculateModuleDownload", "getFileTypeInfo"]
             .map { name -> String in
                 try declaration(named: name, in: script)
             }
             .joined(separator: "\n")
 
+        // The extracted bodies call this, and it needs a DOM to render into. Replaced
+        // with a plain pass-through: these tests assert on the markup, not on how the
+        // browser escapes it, and that behaviour is covered by the payload tests above.
+        let escapeStub = """
+        const escapeHtml = (text) => text;
+        """
+
         let source = """
         \(helpers)
+        \(escapeStub)
         console.log((function(module) {\(body)})(\(argument)));
         """
         // console.log appends a newline; the value under test is the string itself.
         return try run(source).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A `.car` is a bundle, and the report lists its assets individually, so listing the
+    /// catalog alongside them shows the same bytes twice. The module panel was the last
+    /// place it still appeared: `Cargo…/Assets.car 58.6 KB` under a module whose only
+    /// other file was a 4 B plist. Directory entries appear there too, at 0 B, for the
+    /// same reason — the archive lists them and nothing else filters them out.
+    ///
+    /// Runs the real `renderAssetFiles` against a Swift-encoded module.
+    @Test("the module panel lists catalog contents, not the catalog")
+    func panelListsContentsNotCatalog() throws {
+        let module = ModuleSize(name: "C24ProfisCraftsmen")
+        module.addToTop(file: "Payload/App.app/C24ProfisCraftsmen.bundle/Assets.car", size: 60010)
+        module.addToTop(file: "Payload/App.app/C24ProfisCraftsmen.bundle/Info.plist", size: 4)
+        module.addToTop(file: "Payload/App.app/C24ProfisCraftsmen.bundle/", size: 0)
+        module.assetCatalogFiles["icon.png"] = 1608
+
+        let html = try html(for: #"{"modules":{}}"#)
+        let script = try #require(Self.appScript(in: html))
+        let body = try #require(
+            Self.functionBody(named: "renderAssetFiles", in: script),
+            "renderAssetFiles not found"
+        )
+        let json = try #require(
+            String(data: try JSONEncoder().encode(module), encoding: .utf8)
+        )
+
+        let rendered = try Self.evaluateString(body, argument: json, script: script)
+
+        #expect(!rendered.contains("Assets.car"))
+        // The directory entry the archive lists at 0 B is not a file.
+        #expect(!rendered.contains("Craftsmen.bundle/</span>"))
+        // What is inside the catalog is listed in its place.
+        #expect(rendered.contains("icon.png"))
+        #expect(rendered.contains("Info.plist"))
+    }
+
+    /// A module with only a catalog and nothing else must still render its contents.
+    @Test("a module holding only a catalog is not left blank")
+    func catalogOnlyModuleRenders() throws {
+        let module = ModuleSize(name: "Bundle")
+        module.addToTop(file: "Payload/App.app/Bundle.bundle/Assets.car", size: 60010)
+        module.assetCatalogFiles["logo@2x.png"] = 2400
+
+        let html = try html(for: #"{"modules":{}}"#)
+        let script = try #require(Self.appScript(in: html))
+        let body = try #require(Self.functionBody(named: "renderAssetFiles", in: script))
+        let json = try #require(String(data: try JSONEncoder().encode(module), encoding: .utf8))
+
+        let rendered = try Self.evaluateString(body, argument: json, script: script)
+
+        #expect(rendered.contains("logo@2x.png"))
+        #expect(!rendered.contains("Assets.car"))
     }
 
     /// Runs a function body with a single `module` argument and returns the result.
