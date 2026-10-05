@@ -258,10 +258,17 @@ bytes would overstate the download by the catalog's compression ratio.
 
 A catalog is a bundle, and a bundle tells you nothing about what it costs, so the report
 lists the assets *inside* it rather than listing the `.car` itself. That is what the
-**Largest Asset Files** chart on the Insights tab shows: every file in the bundle that is
+**Largest Resources** chart on the Insights tab shows: every file in the bundle that is
 not compiled code — `.strop`, `.json`, `.strings`, images, and each unpacked catalog
 asset — with the `.car` omitted so the container does not appear alongside its own
 contents.
+
+In the module panel these are two sections rather than one list, because they are two
+different kinds of thing: **Resources** holds the files that are in the bundle, and
+**Asset Catalog** holds the renditions unpacked from the catalog, headed by the `.car`'s
+compressed size. That size is the one that reaches the download total; the renditions
+beneath it are the same bytes expanded, so it is a note about their unit rather than a
+figure to add to them.
 
 The per-asset sum is a breakdown, not a total: it omits catalog overhead, so it will not
 reconcile to the `.car` on disk. Compare `downloadSize` against the IPA listing and
@@ -270,6 +277,41 @@ reconcile to the `.car` on disk. Compare `downloadSize` against the IPA listing 
 > Source files (`.swift`, `.cpp` and the rest) are never in the IPA — they are compiled
 > into the binary. LinkMap source-file sizes therefore contribute to install size only,
 > and cannot contribute to download size at all.
+
+### Compressed and uncompressed
+
+Download size and install size are the same bytes in two states: what the user fetches,
+compressed, and what the device stores, uncompressed. They differ by the app's
+compression ratio, which is often a factor of three, so which one you are looking at
+changes the answer. A control at the top right of the Insights tab switches between them.
+
+It drives the charts that have both figures — **Largest Modules** and the **App Size
+Treemap** — and it changes how a compiled asset catalog appears in **Largest Resources**,
+which is the one resource with two honest representations. Compressed, the `.car` is a
+single file in the archive and its contents are not in the download at all, so the
+container is the figure. Uncompressed, the container says nothing and the renditions are
+the expanded bytes, so the contents are the figure. Showing both at once would count the
+same bytes twice in one chart.
+
+Three things deliberately do not follow it, and are labelled with their unit instead:
+
+- **Largest Source Files** is uncompressed. Source files are compiled into the binary and
+  never exist in the IPA, so there is no compressed figure to switch to — not a gap in
+  the report, the bytes do not exist.
+- **The Resource Type Breakdown** is compressed. No per-type uncompressed figure is
+  recorded, only per-type compressed. Its "Other" wedge is the residual against that
+  compressed total, so it is the files no category claims — the `.car` files and the
+  untyped remainder — and not the app's compression delta.
+- **Neither User Impact card** follows it. A transfer happens over the compressed IPA and
+  an install occupies the uncompressed one, so each card has exactly one honest figure.
+
+A statically linked module does not move between the two, because it has no compressed
+size of its own; it shows its LinkMap figure in both, which is the same trade described
+under [Statically linked modules](#statically-linked-modules).
+
+Note that switching the whole page does not make the module list reconcile against
+`totalPackageSize`: summing download sizes across modules over-counts the IPA, because a
+statically linked module's bytes are already inside the app binary's compressed size.
 
 ### Statically linked modules
 

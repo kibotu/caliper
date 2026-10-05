@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-05
+
+### Added
+
+- **The Insights tab can show compressed or uncompressed sizes.** A control at the top
+  right switches the page between the two readings of "size", which differ by the app's
+  compression ratio. Every chart with both figures reads one selector, so the control
+  cannot leave two of them measuring different things on the same page.
+  - **Largest Modules** and the **App Size Treemap** switch wholesale. The treemap's
+    tooltip follows too: its binary and asset figures were pinned to the uncompressed pair,
+    which is only correct while the cell is uncompressed.
+  - **Largest Resources** switches how a compiled asset catalog is represented, which is
+    the one resource with two honest figures. Compressed, the `.car` is a single file in
+    the archive and its contents are not in the download at all, so the container is the
+    figure. Uncompressed, the container says nothing about what it costs and the
+    renditions are the expanded bytes, so the contents are the figure.
+  - **Statically linked modules do not move.** They have no compressed size of their own —
+    the linker put their code inside the app binary — so their figure is the uncompressed
+    LinkMap fallback in both modes. This is the same trade documented for
+    `downloadSize`, and the reason summing downloads over-counts the IPA.
+
+  The sections with only one honest figure say which they are rather than appearing to
+  ignore the control: Largest Source Files is uncompressed because source files are
+  compiled into the binary and never exist in the IPA; the Resource Type Breakdown is
+  compressed because no per-type uncompressed figure is recorded; and neither User Impact
+  card follows, since a transfer happens over the compressed IPA while an install occupies
+  the uncompressed one.
+
+### Fixed
+
+- **"Other" in the resource breakdown was the app's compression delta, not a remainder.**
+  Every category in that chart is a compressed size, but the residual was measured against
+  the uncompressed install total, so it absorbed the difference between the two for the
+  whole app. On a three-module test app it reported 348 KB against a real remainder of
+  94 KB, and was the largest wedge in the chart ahead of Binary. It is now measured against
+  the compressed total, which leaves it as the files no category claims — the `.car` files
+  and the untyped remainder.
+- **Images were counted twice in the resource breakdown.** `imageSize` accumulates the same
+  files, at the same compressed size, that populate `resources['png']` and the other image
+  types, so the "Images" rollup summed those bytes a second time and pushed the donut past
+  the app's real size. Its count was worse: it counted every entry in `top`, which is every
+  file in the bundle whatever its type. There is no correct version of that rollup, so it
+  is gone; the per-type breakdown already separates the formats and carries their real
+  counts. The heading now reads "By Size (Compressed)" rather than claiming install size
+  of a chart that plots compressed bytes.
+- **A statically linked module's code size reached the compressed breakdown.** Its download
+  figure is the uncompressed LinkMap fallback, so including it in the total added its
+  entire code size to "Other" — bytes that are already counted once, inside the app
+  binary. Statically linked modules are now excluded from that total.
+- **Every asset in a catalog was displayed twice and misfiled as an unknown file type.**
+  The module panel marked catalog entries by appending `(in catalog)` to the file name,
+  which put the marker in the row twice — once in the name, once in the type badge, which
+  is derived from the name's extension. `"bus.svg (in catalog)"` ends in
+  `"svg (in catalog)"`, which matched no file type, so each asset lost its colour coding
+  and its `title` tooltip offered a path that does not exist in the bundle. Resources and
+  catalog contents are now separate sections, so nothing has to be marked.
+- **A name with no extension was badged with itself.** `getFileTypeInfo` took the last
+  dot-separated component, which for an extensionless name is the whole name — a colour
+  set named `AccentColor` was badged `ACCENTCOLOR`. Such entries are now badged `ASSET`.
+- **The Insights chart labelled the same file differently from the module panels.** The
+  panels appended `(in catalog)`; the chart did not. Both now use the bare name, and each
+  bar's tooltip states whether it is a container or an unpacked rendition.
+- **Re-rendering the Insights tab grew the DOM without bound.** Every chart appended its own
+  tooltip to the body and User Impact wrote into a container it never cleared. That was
+  tolerable while the tab rendered once on first visit, which is what the guard was for;
+  the size control makes it a leak on every flip. Both are now cleared per render.
+- The count badge in a module panel section heading had no styling, because the rule was
+  scoped to the source-file section. It is now styled everywhere it appears.
+- `CaliperVersion.current` read 1.3.2 in the 1.3.3 release, so `--version` disagreed with
+  the tag. It tracks 1.4.0 from here; the missed bump is not backfilled.
+
+### Changed
+
+- **Headings follow Apple's vocabulary.** `Assets.car` is a *compiled asset catalog*, so
+  the report calls it that rather than a "catalog" or a bundle; its contents are an
+  *asset catalog* section, and the general list of non-code files in a container is
+  *Resources* (Xcode's "Copy Bundle Resources"). The panel's "Asset Files" list is now
+  "Resources", and the breakdown beside it — a different view of the same data — is now
+  "Resource Types" rather than sharing the word. The Asset Catalog heading carries the
+  catalog's compressed size, which is the figure that actually reaches the download
+  total; the rows beneath it are the same bytes expanded, so the note explains their unit
+  rather than adding to them.
+- The Insights tab's "Largest Asset Files" chart is now "Largest Resources", matching the
+  sections it draws from. It lists everything in the bundle that is not compiled code,
+  not only images.
+
 ## [1.3.3] - 2026-10-05
 
 ### Fixed
