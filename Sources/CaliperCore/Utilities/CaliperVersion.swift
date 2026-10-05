@@ -6,5 +6,5 @@ import Foundation
 /// way a hardcoded literal in the command definition did.
 public enum CaliperVersion {
     /// Released versions of this tool. Update alongside CHANGELOG.md.
-    public static let current = "1.3.1"
+    public static let current = "1.3.2"
 }

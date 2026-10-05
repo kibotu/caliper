@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-05
+
 ### Fixed
 
 - **Download size read "0 B" for statically linked modules.** A module with no container
@@ -38,17 +40,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`staticallyLinked`.** A per-module flag recording that a module has no container in
-  the IPA, which is what makes the download fallback above applicable.
 - **`assetCatalogFiles`.** The assets unpacked from a module's `.car` catalogs, keyed by
   name. Display only, and deliberately excluded from every total, since the figures are
   uncompressed.
 
 ### Changed
 
+- **1.3.1's "in app binary" label has been removed.** It labelled statically linked
+  modules rather than reporting a figure, which on a real app replaced one row with a
+  placeholder and told the reader nothing they could act on. Such modules now report
+  their LinkMap size instead, as described above. `staticallyLinked` is retained, as it
+  is what makes that fallback applicable.
 - Test suite grown from 43 to 56, covering the asset catalog accounting, the catalog
   listing, and the statically linked fallback. The new tests were verified to fail
   against the previous behaviour.
+
+## [1.3.1] - 2026-10-05
+
+### Fixed
+
+- **Asset catalogs were counted in the wrong units, overstating download size.** The
+  `.car` itself was never added to the download total. In its place, `assetutil`'s
+  per-asset figures — which report each rendition's size after the catalog has been
+  expanded — were written into the dictionaries that record *compressed* sizes. A
+  compiled catalog occupying 940 compressed bytes in the IPA was reported as 1,608.
+  The error scales with how compressible the assets are, so the more PNGs an app had the
+  worse its download figure got. The `.car` is now counted at its compressed size from
+  the archive listing, and the per-asset figures are recorded only as uncompressed image
+  detail. Download size now reconciles exactly with the sum of the IPA listing.
+- **Download size read "0 B" for statically linked modules.** A module with no container
+  in the IPA — the linker put its code inside the app binary — owns no compressed bytes of
+  its own, so its total is legitimately zero, but the report had no way to say so. Most
+  rows of a SwiftPM app are in this position, including every `.tbd` and `.dylib` stub, and
+  an owner's entire download bar collapsed to 0 B whenever all of its modules were static.
+  Such modules are now flagged during LinkMap processing and shown as "in app binary".
+  The numbers are unchanged: a module with a container still reports a real figure, and
+  sorting still uses the measured value, since a static module genuinely contributes
+  nothing to the download.
+
+### Added
+
+- **`staticallyLinked`.** A per-module flag recording that a module has no container in
+  the IPA, so the report can explain a zero download figure instead of asserting one.
+
+### Changed
+
+- Test suite grown from 43 to 53, covering the asset catalog accounting and the
+  statically linked flag. The new tests were verified to fail against the previous
+  behaviour.
 
 ## [1.3.0] - 2026-10-05
 
