@@ -244,6 +244,16 @@ public struct IPAParser {
             moduleSize.addToTop(file: filePath, size: compressedSize)
             
         case "car":
+            // The .car is a file in the IPA, so it counts towards the download exactly
+            // like any other: at its compressed size from the archive listing. Without
+            // this the catalog was absent from the download total entirely, and
+            // `assetutil`'s per-asset figures were standing in for it — those are
+            // uncompressed, which overstated the download of compressible catalogs.
+            moduleSize.addToTop(file: filePath, size: compressedSize)
+
+            // assetutil breaks the catalog's contents down per asset. Those figures are
+            // uncompressed and describe the installed size, so they are recorded as
+            // image detail rather than added to the compressed dictionaries.
             let fullPath = "\(unzippedPath)/\(filePath)"
             // Breadcrumb: Log .car file processing
             fputs("  [Asset Catalog] Processing: \(filePath)\n", stderr)

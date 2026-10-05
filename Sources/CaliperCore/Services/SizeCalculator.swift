@@ -58,6 +58,10 @@ public struct SizeCalculator {
                 let newModule = ModuleSize(name: moduleName)
                 newModule.binarySize = size
                 newModule.proguard = size
+                // Reaching this branch means the IPA parser never produced this module,
+                // so it has no container of its own — the linker put its code inside the
+                // app binary. Recorded so the report can say so instead of showing 0 B.
+                newModule.staticallyLinked = true
                 appSizeReport[moduleName] = newModule
             }
         }

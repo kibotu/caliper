@@ -20,6 +20,13 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     public var imageSize: Int64 = 0
     public var imageFileSize: Int64 = 0
     public var proguard: Int64 = 0
+    /// This module has no container in the IPA; its code is linked into the app binary.
+    ///
+    /// Such a module is created from LinkMap output alone (see `SizeCalculator`), so it
+    /// owns no compressed bytes of its own and `downloadSize` is legitimately zero. The
+    /// report labels these rather than printing "0 B", which reads as a measurement
+    /// rather than the absence of one.
+    public var staticallyLinked: Bool = false
     public var resources: [String: Resource] = [:]
     public var top: [String: Int64] = [:]
     public var files: [FileSize] = []
@@ -67,7 +74,7 @@ public final class ModuleSize: Codable, @unchecked Sendable {
     }
     
     public enum CodingKeys: String, CodingKey {
-        case name, owner, additionalOwners, `internal`, version, binarySize, binaryCompressedSize, imageSize, imageFileSize, proguard, resources, top, files
+        case name, owner, additionalOwners, `internal`, version, binarySize, binaryCompressedSize, imageSize, imageFileSize, proguard, staticallyLinked, resources, top, files
     }
 
     // MARK: - Canonical sizes

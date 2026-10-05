@@ -245,7 +245,26 @@ evidence behind it.
 | **Package Versions** | Package.resolved | - | Swift package dependency versions |
 | **Total IPA Size** | IPA file | Compressed | Download/App Store size |
 | **Total Install Size** | Unzipped IPA | Uncompressed | Actual installed app size |
-| **Asset Catalog Details** | .car files via assetutil | Uncompressed | Parsed with xcrun assetutil |
+| **Asset Catalog Details** | .car files via assetutil | Uncompressed | Per-asset breakdown of the expanded catalog, recorded as image detail (installed size). The download figure comes from the .car's own compressed size in the IPA listing |
+
+### Asset catalogs: two different numbers
+
+An `Assets.car` is a single file in the IPA, so it counts towards the download size at
+exactly the compressed size `unzip -v` reports for it. `assetutil` is run as well, but
+what it reports is each rendition's size *after* the catalog has been expanded — an
+installed-size figure. Those per-asset numbers are recorded as image detail, not added to
+the download total, because they would otherwise be reported as compressed bytes and
+overstate the download by the catalog's compression ratio.
+
+The two need not reconcile to each other. The per-asset sum is a breakdown of the
+catalog's *contents*, so it omits catalog overhead and any rendition whose name does not
+end in a recognised extension. Compare `downloadSize` against the IPA listing and
+`installSize` against the unzipped app; treat the asset breakdown as a way of seeing
+which assets are expensive, not as a total.
+
+> Source files (`.swift`, `.cpp` and the rest) are never in the IPA — they are compiled
+> into the binary. LinkMap source-file sizes therefore contribute to install size only,
+> and cannot contribute to download size at all.
 
 ### Compressed vs Uncompressed
 
@@ -300,11 +319,12 @@ evidence behind it.
 | `binarySize` | bytes | Compiled code size (from LinkMap, so uncompressed; the IPA's compressed size without one) |
 | `binaryCompressedSize` | bytes | Compressed size of the main binary, straight from the IPA |
 | `imageSize` | bytes | Compressed image assets in IPA |
-| `imageFileSize` | bytes | Uncompressed image assets |
+| `imageFileSize` | bytes | Uncompressed image assets, including the per-asset breakdown of any `.car` |
 | `proguard` | bytes | Total uncompressed module size |
 | `resources` | object | File types with size and count |
 | `top` | object | Files in the module, keyed by path, with their compressed size. Excludes the main binary, which is reported as `binaryCompressedSize` |
 | `additionalOwners` | array | Co-owners, when an entry lists more than one |
+| `staticallyLinked` | bool | The module has no container in the IPA; its code is linked into the app binary. It owns no compressed bytes of its own, so the report shows "in app binary" rather than 0 B |
 | `totalPackageSize` | bytes | IPA file size (compressed) |
 | `totalInstallSize` | bytes | Installed app size (uncompressed) |
 

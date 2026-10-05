@@ -490,6 +490,29 @@ public struct HTMLReporter {
             return total + Object.values(module.top).reduce((sum, v) => sum + (v || 0), 0);
         }
 
+        // A module with no container in the IPA owns no compressed bytes: the linker
+        // put its code inside the app binary. Printing "0 B" there reads as a
+        // measurement rather than the absence of one, and it is what most rows of a
+        // SwiftPM app show, so state the reason instead.
+        function formatModuleDownload(module) {
+            if (module.staticallyLinked === true) return 'in app binary';
+            return formatBytes(calculateModuleDownload(module));
+        }
+
+        // Same rule one level up: an owner whose every module is linked into the app
+        // binary has no download bytes to total. The share is left off, since
+        // attributing a percentage of nothing is noise rather than information.
+        function formatOwnerDownload(owner) {
+            if (owner.allStaticallyLinked === true) return 'in app binary';
+            return formatBytes(owner.totalDownloadSize);
+        }
+
+        function ownerDownloadShare(owner) {
+            const total = ownershipData.reduce((sum, d) => sum + d.totalDownloadSize, 0);
+            if (owner.allStaticallyLinked === true || total <= 0) return null;
+            return `(${((owner.totalDownloadSize / total) * 100).toFixed(1)}%)`;
+        }
+
         function calculateModuleTotal(module) {
             // `proguard` is the module's install size: the sum of the uncompressed
             // size of every file attributed to it, plus the LinkMap binary size for
@@ -514,13 +537,17 @@ public struct HTMLReporter {
             
             // Download size is the sum of each module's compressed file sizes.
             const internalDownloadSize = internalModules.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
+            const internalAllStatic = internalModules.every(m => m.staticallyLinked === true);
+            const internalDownloadLabel = internalAllStatic
+                ? 'in app binary'
+                : formatBytes(internalDownloadSize);
             
             document.getElementById('summary').innerHTML = `
                 <div class="summary-card">
                     <h3>Download Size</h3>
                     <div class="value">${formatBytes(totalPackageSize)}</div>
                     <div class="label">Compressed IPA</div>
-                    ${internalCount > 0 ? `<div class="internal-info">Internal: ${formatBytes(internalDownloadSize)}</div>` : ''}
+                    ${internalCount > 0 ? `<div class="internal-info">Internal: ${internalDownloadLabel}</div>` : ''}
                 </div>
                 <div class="summary-card">
                     <h3>Install Size</h3>
@@ -622,8 +649,8 @@ public struct HTMLReporter {
                 // must come from the same function the sort used, or the column
                 // contradicts its own ordering.
                 const displaySize = currentSort === 'installSize'
-                    ? calculateModuleTotal(module)
-                    : calculateModuleDownload(module);
+                    ? formatBytes(calculateModuleTotal(module))
+                    : formatModuleDownload(module);
                 const displayLabel = currentSort === 'installSize' ? 'Install' : 'Download';
                 
                 return `
@@ -640,7 +667,7 @@ public struct HTMLReporter {
                             <div class="module-stats">
                                 <div class="module-stat">
                                     <span class="module-stat-label">${displayLabel}</span>
-                                    <span class="module-size">${formatBytes(displaySize)}</span>
+                                    <span class="module-size">${displaySize}</span>
                                 </div>
                                 <span class="expand-icon" id="icon-${index}">▼</span>
                             </div>
@@ -732,6 +759,10 @@ public struct HTMLReporter {
                 const totalDownloadSize = moduleList.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
                 const totalInstallSize = moduleList.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
                 const totalFiles = moduleList.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
+                // An owner whose modules are all linked into the app binary has no
+                // download bytes of its own to total. Recorded so the figure can say
+                // that, rather than summing an empty set and printing "0 B".
+                const allStaticallyLinked = moduleList.every(m => m.staticallyLinked === true);
 
                 return {
                     name: ownerName,
@@ -739,6 +770,7 @@ public struct HTMLReporter {
                     moduleCount: moduleList.length,
                     fileCount: totalFiles,
                     totalDownloadSize: totalDownloadSize,
+                    allStaticallyLinked: allStaticallyLinked,
                     totalInstallSize: totalInstallSize
                 };
             });
@@ -858,12 +890,12 @@ public struct HTMLReporter {
                 .attr('rx', 3)
                 .on('mouseover', function(event, d) {
                     d3.select(this).style('opacity', 0.7);
-                    const percentage = totalDownloadSize > 0 ? ((d.totalDownloadSize / totalDownloadSize) * 100).toFixed(1) : 0;
+                    const share = ownerDownloadShare(d);
                     tooltip.html(`
                         <div class="d3-tooltip-owner">${escapeHtml(d.name)}</div>
                         <div class="d3-tooltip-row">
                             <span class="d3-tooltip-color" style="background: #063773;"></span>
-                            <span>Download: ${formatBytes(d.totalDownloadSize)} (${percentage}%)</span>
+                            <span>Download: ${formatOwnerDownload(d)}${share ? ' ' + share : ''}</span>
                         </div>
                         <div class="d3-tooltip-row">
                             <span>${d.moduleCount} module(s)</span>
@@ -1047,7 +1079,7 @@ public struct HTMLReporter {
                     <div style="font-size: 14px; color: #666; margin-top: 5px;">File(s)</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 36px; font-weight: bold; color: #063773;">${formatBytes(owner.totalDownloadSize)}</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #063773;">${formatOwnerDownload(owner)}</div>
                     <div style="font-size: 14px; color: #666; margin-top: 5px;">Download size</div>
                 </div>
                 <div style="text-align: center;">
@@ -1126,7 +1158,7 @@ public struct HTMLReporter {
                             <div class="module-stats">
                                 <div class="module-stat">
                                     <span class="module-stat-label">Download</span>
-                                    <span class="module-size">${formatBytes(calculateModuleDownload(module))}</span>
+                                    <span class="module-size">${formatModuleDownload(module)}</span>
                                 </div>
                                 <span class="expand-icon" id="owner-module-icon-${ownerIndex}-${index}">▼</span>
                             </div>

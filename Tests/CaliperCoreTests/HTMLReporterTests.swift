@@ -80,6 +80,33 @@ struct HTMLReporterTests {
         }
     }
 
+    /// The label is the whole point of the change: a module with no container reports
+    /// zero download bytes honestly, and the report has to say why rather than print
+    /// "0 B". Extract the real function and run it against a Swift-encoded module, so
+    /// the assertion covers the shipped template.
+    @Test("a statically linked module is labelled, not measured as zero")
+    func labelsStaticallyLinkedModules() throws {
+        let html = try html(for: #"{"modules":{}}"#)
+        let script = try #require(Self.appScript(in: html))
+        let body = try #require(
+            Self.functionBody(named: "formatModuleDownload", in: script),
+            "formatModuleDownload not found"
+        )
+
+        func module(_ staticallyLinked: Bool) throws -> String {
+            let encoded = ModuleSize(name: "Gamma")
+            encoded.staticallyLinked = staticallyLinked
+            let json = try #require(
+                String(data: try JSONEncoder().encode(encoded), encoding: .utf8)
+            )
+            return try Self.evaluateString(body, argument: json, script: script)
+        }
+
+        #expect(try module(true) == "in app binary")
+        // A module with a container must still report a real figure.
+        #expect(try module(false) == "0 B")
+    }
+
     /// `node` if it is on PATH, otherwise nil.
     static func javaScriptEngine() -> URL? {
         for candidate in ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"] {
@@ -167,11 +194,57 @@ struct HTMLReporterTests {
         return nil
     }
 
+    /// The whole `function name(...) { ... }` declaration, signature included. Rebuilding
+    /// one from a body alone means inventing the parameter list, which silently passes
+    /// `undefined` where the function expects a module.
+    static func declaration(named name: String, in script: String) throws -> String {
+        let signature = try #require(
+            script.range(of: "function \(name)("),
+            "\(name) not found"
+        )
+        let body = try #require(functionBody(named: name, in: script), "\(name) has no body")
+        let head = script[signature.lowerBound..<script.range(of: "{", range: signature.upperBound..<script.endIndex)!.lowerBound]
+        return "\(head){\(body)}"
+    }
+
+    /// Runs `body` against `argument` and returns its result as a string. The helpers it
+    /// calls are lifted from `script` rather than retyped here, so the assertion
+    /// exercises the shipped definitions instead of copies that could drift from them.
+    static func evaluateString(
+        _ body: String,
+        argument: String,
+        script: String
+    ) throws -> String {
+        let helpers = try ["formatBytes", "calculateModuleDownload"]
+            .map { name -> String in
+                try declaration(named: name, in: script)
+            }
+            .joined(separator: "\n")
+
+        let source = """
+        \(helpers)
+        console.log((function(module) {\(body)})(\(argument)));
+        """
+        // console.log appends a newline; the value under test is the string itself.
+        return try run(source).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Runs a function body with a single `module` argument and returns the result.
     /// The body is wrapped rather than spliced into a declaration, so its own
     /// `module` parameter shadows nothing.
     static func evaluate(_ body: String, argument: String) throws -> Int {
         let source = "console.log((function(module) {\(body)})(\(argument)));"
+        let printed = try run(source)
+        guard let value = Int(printed.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw CalibrationError.evaluationFailed(
+                "expected a number, got \(printed)\nsource: \(source)"
+            )
+        }
+        return value
+    }
+
+    /// Runs a standalone JS `source`, returning whatever it wrote to stdout.
+    static func run(_ source: String) throws -> String {
         let script = try #require(javaScriptEngine(), "node not available")
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("caliper-eval-\(UUID().uuidString).js")
@@ -190,16 +263,14 @@ struct HTMLReporterTests {
         let errorData = errors.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
-        guard process.terminationStatus == 0,
-              let value = Int(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
-        else {
+        guard process.terminationStatus == 0 else {
             throw CalibrationError.evaluationFailed(
                 String(decoding: data, as: UTF8.self)
                     + String(decoding: errorData, as: UTF8.self)
                     + "\nsource: \(source)"
             )
         }
-        return value
+        return String(decoding: data, as: UTF8.self)
     }
 
     enum CalibrationError: Error {
