@@ -63,6 +63,7 @@ jobs:
             See commit history for details.
           files: |
             .build/release/caliper
+            .build/release/caliper_CaliperCore.bundle
           draft: false
           prerelease: false
 
