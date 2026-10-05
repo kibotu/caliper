@@ -436,7 +436,41 @@ public struct HTMLReporter {
             return (isInternal && ownershipFilters.internal) || (!isInternal && ownershipFilters.external);
         }
         
-        function getFileTypeInfo(filePath) {
+        // The files a module ships, as the module panel lists them.
+//
+// A `.car` is omitted: it is a bundle, and its assets are listed individually instead,
+// so showing the container would show the same bytes twice — once as the catalog and
+// once as the images inside it. Directory entries are omitted too, since the archive
+// lists them at 0 B and "Assets.car 58.6 KB" next to a bare path with no extension is
+// noise rather than information.
+function renderAssetFiles(module) {
+    const files = Object.entries(module.top || {})
+        .filter(([path]) => !path.toLowerCase().endsWith('.car') && !path.endsWith('/'))
+        .sort((a, b) => b[1] - a[1]);
+
+    // Catalogs the report could unpack are listed by their contents instead, so those
+    // have to appear somewhere or the module looks empty. Checked after the filter, not
+    // before: a module holding only a catalog has no `top` files left once the catalog
+    // itself is dropped, and returning early there rendered it blank.
+    const catalog = Object.entries(module.assetCatalogFiles || {})
+        .map(([name, size]) => [`${name} (in catalog)`, size])
+        .sort((a, b) => b[1] - a[1]);
+
+    const rows = [...catalog, ...files];
+    if (rows.length === 0) return '';
+
+    return `
+        <div class="top-files">
+            <h4>Asset Files <span class="count-badge">${rows.length}</span></h4>
+            ${rows.map(([path, size]) => {
+                const fileInfo = getFileTypeInfo(path);
+                return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
+            }).join('')}
+        </div>
+    `;
+}
+
+function getFileTypeInfo(filePath) {
             const ext = filePath.split('.').pop().toLowerCase();
             
             // Image files
@@ -596,16 +630,7 @@ public struct HTMLReporter {
                 ` : '';
                 
                 // Top files from asset catalog
-                const topFiles = Object.entries(module.top || {}).sort((a, b) => b[1] - a[1]);
-                const topFilesHTML = topFiles.length > 0 ? `
-                    <div class="top-files">
-                        <h4>Asset Files <span class="count-badge">${topFiles.length}</span></h4>
-                        ${topFiles.map(([path, size]) => {
-                            const fileInfo = getFileTypeInfo(path);
-                            return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
-                        }).join('')}
-                    </div>
-                ` : '';
+                const topFilesHTML = renderAssetFiles(module);
                 
                 // Source files from LinkMap (show ALL files)
                 const sourceFiles = module.files || [];
@@ -1091,16 +1116,7 @@ public struct HTMLReporter {
                 ` : '';
                 
                 // Top files from asset catalog
-                const topFiles = Object.entries(module.top || {}).sort((a, b) => b[1] - a[1]);
-                const topFilesHTML = topFiles.length > 0 ? `
-                    <div class="top-files">
-                        <h4>Asset Files <span class="count-badge">${topFiles.length}</span></h4>
-                        ${topFiles.map(([path, size]) => {
-                            const fileInfo = getFileTypeInfo(path);
-                            return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
-                        }).join('')}
-                    </div>
-                ` : '';
+                const topFilesHTML = renderAssetFiles(module);
                 
                 // Source files from LinkMap
                 const sourceFiles = module.files || [];
@@ -1248,7 +1264,8 @@ public struct HTMLReporter {
             // Everything in the bundle that is not compiled code counts as an asset,
             // not just images. A `.car` is the exception: it is a bundle, and a bundle
             // says nothing about what it costs, so the catalog is listed by its
-            // contents instead of by its own compressed size.
+            // contents instead of by its own compressed size. Directory entries are
+            // excluded for the same reason — the archive lists them at 0 B.
             const allAssets = [];
             modules.forEach(module => {
                 // Exclude external modules (frameworks) from asset files
@@ -1256,7 +1273,7 @@ public struct HTMLReporter {
 
                 if (module.top) {
                     Object.entries(module.top).forEach(([path, size]) => {
-                        if (path.toLowerCase().endsWith('.car')) return;
+                        if (path.toLowerCase().endsWith('.car') || path.endsWith('/')) return;
                         allAssets.push({
                             name: path,
                             size: size,
