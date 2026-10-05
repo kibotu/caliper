@@ -80,6 +80,13 @@ public struct HTMLReporter {
         .module-name-row { font-size: 16px; font-weight: 600; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .module-version { color: #063773; }
         .owner-badge { display: inline-flex; align-items: center; padding: 4px 10px; background: linear-gradient(135deg, #063773 0%, #0a5aa8 100%); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(6, 55, 115, 0.2); flex-shrink: 0; }
+        /* A co-owner rather than the primary one. Lighter, so the order reads without a
+           second label saying "also". */
+        .owner-badge.additional { background: linear-gradient(135deg, #0a5aa8 0%, #3498db 100%); }
+        .owner-badge.owner-badge-filter { cursor: pointer; }
+        /* The team this click would filter to, so the badge does not just look clickable. */
+        .owner-badge.owner-badge-filter:hover { filter: brightness(1.15); }
+        .owner-badge.team-selected { outline: 2px solid #f39c12; outline-offset: 1px; }
         .internal-badge { display: inline-flex; align-items: center; padding: 4px 10px; background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(155, 89, 182, 0.2); flex-shrink: 0; }
         .module-stats { display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
         .module-stat { display: flex; flex-direction: column; align-items: flex-end; }
@@ -198,6 +205,12 @@ public struct HTMLReporter {
             <div class="summary" id="summary"></div>
             <div class="controls">
                 <input type="text" id="searchInput" placeholder="Search modules..." />
+                <!-- Populated from the owners actually present, so a team that owns
+                     nothing cannot be selected. An owner badge filters to the same
+                     value; see selectTeamFilter. -->
+                <select id="teamFilterSelect">
+                    <option value="">All teams</option>
+                </select>
                 <div class="filter-chips">
                     <div class="filter-chip active" data-filter="internal" onclick="toggleBreakdownFilter('internal')">Internal</div>
                     <div class="filter-chip active" data-filter="external" onclick="toggleBreakdownFilter('external')">External</div>
@@ -289,6 +302,7 @@ public struct HTMLReporter {
                     <div>
                         <h2 style="font-size: 20px; color: #333; margin-bottom: 10px;">Ownership overview</h2>
                         <p style="color: #666; font-size: 14px;">Shows how much of the overall app size is owned by each owner.</p>
+                        <p style="color: #999; font-size: 12px; margin-top: 8px; max-width: 640px;">The chart counts each module once, under its first owner, so the teams add up to the app. The list below counts a shared module in full for every team that owns it, so its totals add up to more than the app — there is no honest way to split a framework's bytes between two teams.</p>
                     </div>
                     <div style="display: flex; gap: 15px; align-items: center;">
                         <div class="filter-chips">
@@ -325,6 +339,9 @@ public struct HTMLReporter {
         let currentTab = 'breakdown';
         let currentSort = 'downloadSize';
         let breakdownFilters = { internal: true, external: true, owned: true, unowned: true };
+        // The team the breakdown is filtered to, or '' for all of them. Drives both the
+        // dropdown and the owner badges, so the two cannot disagree.
+        let breakdownTeamFilter = '';
         let insightsFilters = { internal: true, external: true };
         let ownershipFilters = { internal: true, external: true };
         
@@ -422,7 +439,8 @@ public struct HTMLReporter {
                     chip.classList.toggle('active', ownershipFilters[filter]);
                 }
             });
-            ownershipData = prepareOwnershipData(currentOwnershipSort);
+            ownershipChartData = prepareOwnershipChartData(currentOwnershipSort);
+            ownerGroupData = prepareOwnerGroupData(currentOwnershipSort);
             renderOwnershipChart();
             populateOwnerDropdown();
             // Reset detail view
@@ -430,17 +448,92 @@ public struct HTMLReporter {
             document.getElementById('ownerDetailSection').style.display = 'none';
         }
         
+        // Every owner of a module, primary first and de-duplicated.
+        //
+        // `additionalOwners` comes from the `owners: [a, b]` form of an ownership entry;
+        // a module with a single owner carries no such field. The primary is skipped when
+        // it repeats, which a hand-written file can easily do.
+        function allOwners(module) {
+            const owners = [];
+            if (module.owner) owners.push(module.owner);
+            (module.additionalOwners || []).forEach(owner => {
+                if (owner && !owners.includes(owner)) owners.push(owner);
+            });
+            return owners;
+        }
+
+        // Every team named anywhere in the report, for the team filter's options.
+        function collectAllTeams() {
+            const teams = new Set();
+            Object.values(data.modules).forEach(module => {
+                allOwners(module).forEach(team => teams.add(team));
+            });
+            return [...teams].sort((a, b) => a.localeCompare(b));
+        }
+
+        // The team the breakdown is filtered to, shared by the dropdown and the badges.
+        // Clicking the team that is already selected clears the filter, so a badge
+        // toggles rather than latching.
+        function selectTeamFilter(team) {
+            breakdownTeamFilter = breakdownTeamFilter === team ? '' : (team || '');
+            document.getElementById('teamFilterSelect').value = breakdownTeamFilter;
+            renderModules(document.getElementById('searchInput').value, currentSort);
+        }
+
+        function populateTeamFilterSelect() {
+            const select = document.getElementById('teamFilterSelect');
+            const current = breakdownTeamFilter;
+            select.innerHTML = '<option value="">All teams</option>';
+            collectAllTeams().forEach(team => {
+                const option = document.createElement('option');
+                option.value = team;
+                option.textContent = team;
+                select.appendChild(option);
+            });
+            // An option can disappear when a filter elsewhere empties a team out, which
+            // would leave the select blank rather than showing the filter that is active.
+            select.value = current;
+            if (select.value !== current) breakdownTeamFilter = '';
+        }
+
+        // The owner badges on a module card: one per owner, co-owners in a lighter
+        // gradient.
+        //
+        // `filterable` adds the behaviour that turns a badge into the team filter. It is
+        // on for the breakdown cards and off for the owner detail cards: those are on the
+        // Ownership tab, where the breakdown filter does not apply, so a badge that looked
+        // clickable there would do nothing when clicked. As a plain badge it still answers
+        // the question the reader has — this module is also owned by another team.
+        function renderOwnerBadges(module, filterable = true) {
+            const owners = allOwners(module);
+            if (!owners.length) return '';
+            return owners.map((owner, index) => {
+                const additional = index > 0 ? ' additional' : '';
+                if (!filterable) {
+                    return `<span class="owner-badge${additional}" title="${escapeHtml(owner)}">${escapeHtml(owner)}</span>`;
+                }
+                const selected = owner === breakdownTeamFilter ? ' team-selected' : '';
+                const why = owner === breakdownTeamFilter ? 'Clear the team filter' : `Filter to ${owner}`;
+                return `<span class="owner-badge owner-badge-filter${additional}${selected}" data-owner="${escapeHtml(owner)}" title="${escapeHtml(why)}">${escapeHtml(owner)}</span>`;
+            }).join('');
+        }
+
         function moduleMatchesBreakdownFilters(module) {
             // Check internal/external filter
             const isInternal = module.internal === true;
             const internalMatch = (isInternal && breakdownFilters.internal) || (!isInternal && breakdownFilters.external);
             if (!internalMatch) return false;
-            
+
             // Check owned/unowned filter
             const isOwned = module.owner && module.owner.toLowerCase() !== 'others';
             const ownedMatch = (isOwned && breakdownFilters.owned) || (!isOwned && breakdownFilters.unowned);
             if (!ownedMatch) return false;
-            
+
+            // Check the team filter. A module matches on any of its owners, so a shared
+            // module stays visible to both teams rather than being hidden from whichever
+            // one is not listed first.
+            if (breakdownTeamFilter && !allOwners(module).includes(breakdownTeamFilter)) return false;
+
             return true;
         }
         
@@ -712,7 +805,7 @@ function getFileTypeInfo(filePath) {
                                     ${escapeHtml(module.name)}
                                     ${module.version ? `<span class="module-version">:${module.version}</span>` : ''}
                                 </div>
-                                ${module.owner ? `<span class="owner-badge">${escapeHtml(module.owner)}</span>` : ''}
+                                ${renderOwnerBadges(module)}
                                 ${module.internal ? `<span class="internal-badge">Internal</span>` : ''}
                             </div>
                             <div class="module-stats">
@@ -776,63 +869,90 @@ function getFileTypeInfo(filePath) {
         });
         
         // Ownership Tab Functions
-        let ownershipData = [];
+        // Two groupings, deliberately different.
+        //
+        // The chart answers "how is the app split", so it counts each module once, under
+        // its primary owner. The teams partition the app and the bars sum to its total.
+        //
+        // The per-team list answers "what is this team responsible for", so it counts a
+        // shared module in full for every team that owns it. Those totals deliberately sum
+        // to more than the app, because splitting a framework between two teams would
+        // need a share of the bytes that does not exist. Collapsing the two groupings into
+        // one would mean either the chart double-counts or the list under-reports a team,
+        // so they stay apart and the tab says which is which.
+        let ownershipChartData = [];
+        let ownerGroupData = [];
         let currentOwnershipSort = 'downloadSize';
-        
-        function prepareOwnershipData(sortBy = 'downloadSize') {
-            // Group modules by owner property
-            const modulesByOwner = {};
-            let hasOwners = false;
-            
-            Object.entries(data.modules).forEach(([moduleName, module]) => {
-                // Apply ownership filters
-                if (!moduleMatchesOwnershipFilters(module)) {
-                    return;
-                }
-                
-                const owner = module.owner || 'others';
-                if (module.owner) hasOwners = true;
-                
-                if (!modulesByOwner[owner]) {
-                    modulesByOwner[owner] = {};
-                }
-                modulesByOwner[owner][moduleName] = module;
-            });
-            
-            if (!hasOwners) {
-                return [];
-            }
-            
-            const ownerData = Object.entries(modulesByOwner).map(([ownerName, modules]) => {
-                const moduleList = Object.values(modules);
-                // Same two functions the breakdown tab uses, so an owner's totals
-                // agree with the module cards beneath them.
-                const totalDownloadSize = moduleList.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
-                const totalInstallSize = moduleList.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
-                const totalFiles = moduleList.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
 
-                return {
-                    name: ownerName,
-                    modules: modules,
-                    moduleCount: moduleList.length,
-                    fileCount: totalFiles,
-                    totalDownloadSize: totalDownloadSize,
-                    totalInstallSize: totalInstallSize
-                };
-            });
+        // Sums a team's modules. Same two functions the breakdown tab uses, so a team's
+        // totals agree with the module cards beneath them.
+        function summariseOwner(name, moduleList) {
+            return {
+                name: name,
+                modules: moduleList,
+                moduleCount: moduleList.length,
+                fileCount: moduleList.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0),
+                totalDownloadSize: moduleList.reduce((sum, m) => sum + calculateModuleDownload(m), 0),
+                totalInstallSize: moduleList.reduce((sum, m) => sum + calculateModuleTotal(m), 0)
+            };
+        }
 
-            // Sort based on selected metric
+        function sortOwners(ownerData, sortBy) {
             if (sortBy === 'installSize') {
                 return ownerData.sort((a, b) => b.totalInstallSize - a.totalInstallSize);
-            } else {
-                return ownerData.sort((a, b) => b.totalDownloadSize - a.totalDownloadSize);
             }
+            return ownerData.sort((a, b) => b.totalDownloadSize - a.totalDownloadSize);
+        }
+
+        // Primary owner only, so the chart's bars add up to the app.
+        function prepareOwnershipChartData(sortBy = 'downloadSize') {
+            const modulesByOwner = {};
+            let hasOwners = false;
+
+            Object.values(data.modules).forEach(module => {
+                if (!moduleMatchesOwnershipFilters(module)) return;
+
+                const owner = module.owner || 'others';
+                if (module.owner) hasOwners = true;
+
+                if (!modulesByOwner[owner]) modulesByOwner[owner] = [];
+                modulesByOwner[owner].push(module);
+            });
+
+            if (!hasOwners) return [];
+
+            return sortOwners(
+                Object.entries(modulesByOwner).map(([name, list]) => summariseOwner(name, list)),
+                sortBy
+            );
+        }
+
+        // Every owner, so a shared module is attributed to each team in full.
+        function prepareOwnerGroupData(sortBy = 'downloadSize') {
+            const modulesByOwner = {};
+
+            Object.values(data.modules).forEach(module => {
+                if (!moduleMatchesOwnershipFilters(module)) return;
+
+                const owners = allOwners(module);
+                if (!owners.length) return;
+
+                owners.forEach(owner => {
+                    if (!modulesByOwner[owner]) modulesByOwner[owner] = [];
+                    modulesByOwner[owner].push(module);
+                });
+            });
+
+            return sortOwners(
+                Object.entries(modulesByOwner).map(([name, list]) => summariseOwner(name, list)),
+                sortBy
+            );
         }
         
         function renderOwnershipChart() {
             const chartContainer = document.getElementById('ownershipChart');
             
-            if (ownershipData.length === 0) {
+            if (ownershipChartData.length === 0) {
                 chartContainer.innerHTML = `
                     <div class="no-results">
                         <p>No ownership data available.</p>
@@ -852,13 +972,13 @@ function getFileTypeInfo(filePath) {
             const barGap = 10;
             const groupGap = 30;
             const groupWidth = (barWidth * 2) + barGap;
-            const width = ownershipData.length * (groupWidth + groupGap) + margin.left + margin.right;
+            const width = ownershipChartData.length * (groupWidth + groupGap) + margin.left + margin.right;
             const height = 450;
             const chartHeight = height - margin.top - margin.bottom;
             
             // Calculate totals for percentages
-            const totalDownloadSize = ownershipData.reduce((sum, d) => sum + d.totalDownloadSize, 0);
-            const totalInstallSize = ownershipData.reduce((sum, d) => sum + d.totalInstallSize, 0);
+            const totalDownloadSize = ownershipChartData.reduce((sum, d) => sum + d.totalDownloadSize, 0);
+            const totalInstallSize = ownershipChartData.reduce((sum, d) => sum + d.totalInstallSize, 0);
             
             // Create tooltip
             const tooltip = d3.select('body').append('div')
@@ -877,11 +997,11 @@ function getFileTypeInfo(filePath) {
             
             // Scales
             const x = d3.scaleBand()
-                .domain(ownershipData.map(d => d.name))
+                .domain(ownershipChartData.map(d => d.name))
                 .range([0, width - margin.left - margin.right])
                 .padding(0.3);
             
-            const maxSize = d3.max(ownershipData, d => Math.max(d.totalDownloadSize, d.totalInstallSize));
+            const maxSize = d3.max(ownershipChartData, d => Math.max(d.totalDownloadSize, d.totalInstallSize));
             const y = d3.scaleLinear()
                 .domain([0, maxSize])
                 .nice()
@@ -919,7 +1039,7 @@ function getFileTypeInfo(filePath) {
             
             // Create groups for each owner
             const ownerGroups = g.selectAll('.owner-group')
-                .data(ownershipData)
+                .data(ownershipChartData)
                 .enter()
                 .append('g')
                 .attr('class', 'owner-group')
@@ -956,11 +1076,7 @@ function getFileTypeInfo(filePath) {
                     tooltip.classed('visible', false);
                 })
                 .on('click', function(event, d) {
-                    const index = ownershipData.indexOf(d);
-                    document.getElementById('ownerDropdown').value = index;
-                    renderOwnerDetails(index);
-                    // Scroll to details
-                    document.getElementById('ownerDetailSection').scrollIntoView({ behavior: 'smooth' });
+                    showOwnerDetails(d.name);
                 })
                 .transition()
                 .duration(800)
@@ -999,11 +1115,7 @@ function getFileTypeInfo(filePath) {
                     tooltip.classed('visible', false);
                 })
                 .on('click', function(event, d) {
-                    const index = ownershipData.indexOf(d);
-                    document.getElementById('ownerDropdown').value = index;
-                    renderOwnerDetails(index);
-                    // Scroll to details
-                    document.getElementById('ownerDetailSection').scrollIntoView({ behavior: 'smooth' });
+                    showOwnerDetails(d.name);
                 })
                 .transition()
                 .duration(800)
@@ -1049,10 +1161,24 @@ function getFileTypeInfo(filePath) {
                 .text('Install size');
         }
         
+        // Open a team's detail section by name.
+        //
+        // The chart and the dropdown are built from different groupings now — primary
+        // owner versus every owner — so they do not share indices. Resolving by name is
+        // what keeps a click on a bar working: the bar's team is looked up in the list
+        // the dropdown was populated from, wherever that team happens to sit in it.
+        function showOwnerDetails(ownerName) {
+            const index = ownerGroupData.findIndex(owner => owner.name === ownerName);
+            if (index === -1) return;
+            document.getElementById('ownerDropdown').value = index;
+            renderOwnerDetails(index);
+            document.getElementById('ownerDetailSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
         function populateOwnerDropdown(autoSelectApp = false) {
             const dropdown = document.getElementById('ownerDropdown');
             
-            if (ownershipData.length === 0) {
+            if (ownerGroupData.length === 0) {
                 dropdown.disabled = true;
                 return;
             }
@@ -1060,7 +1186,7 @@ function getFileTypeInfo(filePath) {
             dropdown.innerHTML = '<option value="">Select an owner...</option>';
             
             // Create array with owner and original index
-            const ownerWithIndices = ownershipData.map((owner, index) => ({
+            const ownerWithIndices = ownerGroupData.map((owner, index) => ({
                 owner: owner,
                 index: index
             }));
@@ -1110,7 +1236,7 @@ function getFileTypeInfo(filePath) {
                 return;
             }
             
-            const owner = ownershipData[ownerIndex];
+            const owner = ownerGroupData[ownerIndex];
             detailSection.style.display = 'block';
             
             // Render summary
@@ -1136,13 +1262,20 @@ function getFileTypeInfo(filePath) {
             
             // Render modules
             const modulesGrid = document.getElementById('ownerModulesGrid');
-            const modules = Object.entries(owner.modules).sort((a, b) => {
-                return calculateModuleDownload(b[1]) - calculateModuleDownload(a[1]);
-            });
-            
-            const maxModuleSize = Math.max(...modules.map(([_, m]) => calculateModuleTotal(m)));
-            
-            modulesGrid.innerHTML = modules.map(([moduleName, module], index) => {
+            // `owner.modules` is a list of modules, not a name-keyed map: a module can
+            // appear under several teams, and the array does not care that. It used to be
+            // a map, and reading it as one made every card below show its own index as the
+            // module name.
+            const modules = owner.modules
+                .slice()
+                .sort((a, b) => calculateModuleDownload(b) - calculateModuleDownload(a));
+
+            const maxModuleSize = modules.length
+                ? Math.max(...modules.map(m => calculateModuleTotal(m)))
+                : 0;
+
+            modulesGrid.innerHTML = modules.map((module, index) => {
+                const moduleName = module.name;
                 const totalSize = calculateModuleTotal(module);
                 const binaryPercent = maxModuleSize > 0 ? (module.binarySize || 0) / maxModuleSize * 100 : 0;
                 const imagePercent = maxModuleSize > 0 ? (module.imageFileSize || 0) / maxModuleSize * 100 : 0;
@@ -1192,6 +1325,7 @@ function getFileTypeInfo(filePath) {
                                     ${moduleName}
                                     ${module.version ? `<span class="module-version">:${module.version}</span>` : ''}
                                 </div>
+                                ${renderOwnerBadges(module, false)}
                                 ${module.internal ? `<span class="internal-badge">Internal</span>` : ''}
                             </div>
                             <div class="module-stats">
@@ -1252,18 +1386,37 @@ function getFileTypeInfo(filePath) {
         
         document.getElementById('ownershipSortSelect').addEventListener('change', (e) => {
             currentOwnershipSort = e.target.value;
-            ownershipData = prepareOwnershipData(currentOwnershipSort);
+            ownershipChartData = prepareOwnershipChartData(currentOwnershipSort);
+            ownerGroupData = prepareOwnerGroupData(currentOwnershipSort);
             renderOwnershipChart();
             populateOwnerDropdown();
             // Reset detail view
             document.getElementById('ownerDropdown').value = '';
             document.getElementById('ownerDetailSection').style.display = 'none';
         });
-        
+
+        document.getElementById('teamFilterSelect').addEventListener('change', (e) => {
+            breakdownTeamFilter = e.target.value;
+            renderModules(document.getElementById('searchInput').value, currentSort);
+        });
+
+        // Owner badges are filters, on both the module card and the owner detail card.
+        // Delegated, because the cards are rebuilt on every render and a per-card
+        // handler would have to be reattached each time.
+        document.querySelector('.container').addEventListener('click', (e) => {
+            const badge = e.target.closest('.owner-badge-filter');
+            if (!badge) return;
+            // The card header also toggles, so the badge must not fall through to it.
+            e.stopPropagation();
+            selectTeamFilter(badge.dataset.owner);
+        });
+
         updateHeader();
         renderSummary();
+        populateTeamFilterSelect();
         renderModules();
-        ownershipData = prepareOwnershipData(currentOwnershipSort);
+        ownershipChartData = prepareOwnershipChartData(currentOwnershipSort);
+        ownerGroupData = prepareOwnerGroupData(currentOwnershipSort);
         renderOwnershipChart();
         populateOwnerDropdown(true); // Auto-select "App" on initial page load
         
