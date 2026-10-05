@@ -146,11 +146,27 @@ Track which team owns which modules:
   owner: External
 ```
 
+**Multiple owners:**
+
+A module can belong to more than one team. Use `owners` for a list; the first entry is the
+primary owner and the rest are reported as `additionalOwners`:
+
+```yaml
+- identifier: "SharedUI"
+  owners:
+    - ui-team
+    - design-systems
+```
+
 **Pattern syntax:**
 - `*` = any characters
 - `?` = single character
 - `internal: true` = marks as first-party code
 - `owner` = team/group name for reporting
+- `owners` = list of teams for co-owned modules
+
+Everything that is not a wildcard is matched literally, so `Foundation.tbd` matches only
+itself. The **first** matching entry wins, so put specific patterns above general ones.
 
 **Note:** The main app module is automatically tagged with `owner: "App"` and `internal: true` even without an ownership file.
 
@@ -200,6 +216,23 @@ For namespaced packages (e.g., internal packages):
 | `--ownership-file` | ⬜ No | YAML file with module ownership patterns |
 | `--package-resolved-path` | ⬜ No | Path to Package.resolved for version tracking |
 | `--package-mapping-file` | ⬜ No | YAML file for namespaced package mappings |
+| `--output-dir` | ⬜ No | Directory to write the reports into (default: current directory) |
+| `--max-package-size` | ⬜ No | Fail if the IPA exceeds this many bytes |
+| `--max-install-size` | ⬜ No | Fail if the installed size exceeds this many bytes |
+
+### Size thresholds
+
+Pass a limit and Caliper exits non-zero when the build exceeds it, which makes it usable
+as a CI gate:
+
+```bash
+caliper --ipa-path MyApp.ipa \
+  --max-package-size $((100 * 1024 * 1024)) \
+  --max-install-size $((150 * 1024 * 1024))
+```
+
+Both reports are written before the check runs, so a failed build still leaves you the
+evidence behind it.
 
 ## Data Sources
 
@@ -227,15 +260,18 @@ For namespaced packages (e.g., internal packages):
 
 ```json
 {
-  "app": {
-    "name": "MyApp",
+  "appInfo": {
+    "appName": "MyApp",
+    "appModuleName": "MyApp",
     "version": "1.2.3",
-    "bundleId": "com.company.myapp"
+    "buildNumber": "45",
+    "bundleIdentifier": "com.company.myapp"
   },
   "modules": {
     "CoreModule": {
       "name": "CoreModule",
       "owner": "Core Team",
+      "additionalOwners": ["Design Systems"],
       "internal": true,
       "version": "2.1.0",
       "binarySize": 1234567,
@@ -261,24 +297,29 @@ For namespaced packages (e.g., internal packages):
 
 | Field | Unit | Description |
 |-------|------|-------------|
-| `binarySize` | bytes | Compiled code size (from LinkMap) |
+| `binarySize` | bytes | Compiled code size (from LinkMap, so uncompressed; the IPA's compressed size without one) |
+| `binaryCompressedSize` | bytes | Compressed size of the main binary, straight from the IPA |
 | `imageSize` | bytes | Compressed image assets in IPA |
 | `imageFileSize` | bytes | Uncompressed image assets |
 | `proguard` | bytes | Total uncompressed module size |
 | `resources` | object | File types with size and count |
-| `top` | object | Top 30 largest files in module |
+| `top` | object | Files in the module, keyed by path, with their compressed size. Excludes the main binary, which is reported as `binaryCompressedSize` |
+| `additionalOwners` | array | Co-owners, when an entry lists more than one |
 | `totalPackageSize` | bytes | IPA file size (compressed) |
 | `totalInstallSize` | bytes | Installed app size (uncompressed) |
 
 ### HTML Report (`report.html`)
 
+A single self-contained file. Everything it needs, including the charting library, is
+embedded, so it opens offline with no network access.
+
 Interactive web interface with:
-- 🔍 Search and filter modules
-- 📊 Sort by size, binary size, or name
-- 📂 Expandable module details
+- 🔍 Search and filter modules by name
+- 📊 Sort by download size, install size, or name
+- 📂 Expandable module details with per-file breakdowns
 - 🎨 Resource breakdowns by file type
-- 📈 Top 10 largest files per module
-- 👥 Filter by owner/team
+- 📈 App-wide top-20 lists for largest modules, source files and assets
+- 👥 Owner breakdown with drill-down
 - 🏷️ Internal vs external module filtering
 
 ## CI/CD Integration
@@ -543,7 +584,7 @@ Before diving into analysis, make sure you have the right build configuration. H
 
 **"The HTML report won't open or looks broken"**
 - Make sure you're opening `report.html` in a modern browser (Chrome, Firefox, Safari)
-- Check that `report.json` exists in the same directory
+- The report is self-contained; `report.json` does not need to sit beside it
 - Some browsers block local file access—try hosting it with `python3 -m http.server` and open via localhost
 - If the JSON is very large (>50 MB), it might be slow to load—be patient
 

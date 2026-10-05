@@ -71,13 +71,18 @@ jobs:
       - name: Display Report Summary
         run: |
           echo "📊 Report Summary:"
-          PACKAGE_SIZE=$(grep -o '"totalPackageSize":[0-9]*' report.json | cut -d':' -f2)
-          INSTALL_SIZE=$(grep -o '"totalInstallSize":[0-9]*' report.json | cut -d':' -f2)
-          MODULE_COUNT=$(grep -o '"name":"[^"]*"' report.json | wc -l)
-          
-          PACKAGE_MB=$(echo "scale=2; $PACKAGE_SIZE / 1024 / 1024" | bc)
-          INSTALL_MB=$(echo "scale=2; $INSTALL_SIZE / 1024 / 1024" | bc)
-          
+
+          # Parse the JSON rather than grepping it. The old pattern
+          # '"totalPackageSize":[0-9]*' never matched the pretty-printed report,
+          # which separates key from value with `" : "`, so both sizes came back
+          # empty and `bc` exited non-zero on an empty expression.
+          PACKAGE_SIZE=$(jq -er '.totalPackageSize' report.json)
+          INSTALL_SIZE=$(jq -er '.totalInstallSize' report.json)
+          MODULE_COUNT=$(jq '.modules | length' report.json)
+
+          PACKAGE_MB=$(awk -v b="$PACKAGE_SIZE" 'BEGIN{printf "%.2f", b/1024/1024}')
+          INSTALL_MB=$(awk -v b="$INSTALL_SIZE" 'BEGIN{printf "%.2f", b/1024/1024}')
+
           echo "IPA Size: ${PACKAGE_MB} MB"
           echo "Install Size: ${INSTALL_MB} MB"
           echo "Modules: ${MODULE_COUNT}"
