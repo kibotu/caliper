@@ -60,9 +60,10 @@ struct ModuleSizeTotalsTests {
 }
 
 /// A module the IPA parser never produced has no container of its own — the linker put
-/// its code inside the app binary — so it owns no compressed bytes and its download
-/// total is legitimately zero. The report has to be able to tell that apart from a
-/// module that genuinely measures zero, which is what `staticallyLinked` records.
+/// its code inside the app binary — so it owns no compressed bytes. Reporting zero
+/// there threw away a real measurement and read as "this module is free", which for an
+/// internal Swift package is badly misleading. Such a module reports its LinkMap size
+/// instead, which is uncompressed: the best available figure beats no figure.
 @Suite("Statically linked modules")
 struct StaticallyLinkedTests {
 
@@ -86,8 +87,20 @@ struct StaticallyLinkedTests {
 
         // Gamma never appeared in the IPA, so its code lives in the app binary.
         #expect(report["Gamma"]?.staticallyLinked == true)
-        // It therefore owns no compressed bytes of its own.
-        #expect(report["Gamma"]?.downloadSize == 0)
+        // No compressed size of its own, so it falls back to its LinkMap figure.
+        #expect(report["Gamma"]?.downloadSize == 7000)
+    }
+
+    /// The fallback is what stops a zero from reading as "this module is free".
+    @Test("a statically linked module reports its measured size, not zero")
+    func staticallyLinkedReportsMeasuredSize() {
+        let module = ModuleSize(name: "Orchard")
+        module.staticallyLinked = true
+        module.binarySize = 35_730     // LinkMap symbols, uncompressed
+        module.proguard = 35_730
+
+        // Real bytes the team owns, sitting in the panel next to its source files.
+        #expect(module.downloadSize == 35_730)
     }
 
     @Test("a module that ships a container is not flagged")
