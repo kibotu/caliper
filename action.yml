@@ -26,6 +26,12 @@ inputs:
     description: 'Directory to output report files (defaults to current directory)'
     required: false
     default: '.'
+  max-package-size:
+    description: 'Fail if the IPA exceeds this many bytes (e.g. "104857600" for 100 MB)'
+    required: false
+  max-install-size:
+    description: 'Fail if the installed size exceeds this many bytes'
+    required: false
 
 outputs:
   report-json:
@@ -109,6 +115,14 @@ runs:
         if [ -n "${{ inputs.package-mapping-file }}" ]; then
           CMD="$CMD --package-mapping-file ${{ inputs.package-mapping-file }}"
         fi
+
+        if [ -n "${{ inputs.max-package-size }}" ]; then
+          CMD="$CMD --max-package-size ${{ inputs.max-package-size }}"
+        fi
+
+        if [ -n "${{ inputs.max-install-size }}" ]; then
+          CMD="$CMD --max-install-size ${{ inputs.max-install-size }}"
+        fi
         
         # Change to output directory
         cd "${{ inputs.output-dir }}"
@@ -122,21 +136,28 @@ runs:
         REPORT_JSON="${{ inputs.output-dir }}/report.json"
         REPORT_HTML="${{ inputs.output-dir }}/report.html"
         
-        echo "report-json=$REPORT_JSON" >> $GITHUB_OUTPUT
-        echo "report-html=$REPORT_HTML" >> $GITHUB_OUTPUT
-        
-        # Extract sizes from JSON report
-        if [ -f "$REPORT_JSON" ]; then
-          PACKAGE_SIZE=$(grep -o '"totalPackageSize":[0-9]*' "$REPORT_JSON" | cut -d':' -f2)
-          INSTALL_SIZE=$(grep -o '"totalInstallSize":[0-9]*' "$REPORT_JSON" | cut -d':' -f2)
-          
-          echo "total-package-size=$PACKAGE_SIZE" >> $GITHUB_OUTPUT
-          echo "total-install-size=$INSTALL_SIZE" >> $GITHUB_OUTPUT
-          
-          # Display human-readable sizes
-          PACKAGE_MB=$(echo "scale=2; $PACKAGE_SIZE / 1024 / 1024" | bc)
-          INSTALL_MB=$(echo "scale=2; $INSTALL_SIZE / 1024 / 1024" | bc)
-          
-          echo "📦 IPA Size: ${PACKAGE_MB} MB"
-          echo "💾 Install Size: ${INSTALL_MB} MB"
+        echo "report-json=$REPORT_JSON" >> "$GITHUB_OUTPUT"
+        echo "report-html=$REPORT_HTML" >> "$GITHUB_OUTPUT"
+
+        if [ ! -f "$REPORT_JSON" ]; then
+          echo "❌ report.json not found at $REPORT_JSON" >&2
+          exit 1
         fi
+
+        # Parse the JSON rather than grepping it. The old pattern
+        # '"totalPackageSize":[0-9]*' never matched, because the report is
+        # pretty-printed and separates key from value with `" : "`. Both sizes came
+        # back empty, and bc then exited 2 on `scale=2;  / 1024 / 1024`, failing the
+        # step under bash -e even though the analysis had succeeded.
+        PACKAGE_SIZE=$(jq -er '.totalPackageSize' "$REPORT_JSON")
+        INSTALL_SIZE=$(jq -er '.totalInstallSize' "$REPORT_JSON")
+
+        echo "total-package-size=$PACKAGE_SIZE" >> "$GITHUB_OUTPUT"
+        echo "total-install-size=$INSTALL_SIZE" >> "$GITHUB_OUTPUT"
+
+        # Display human-readable sizes
+        PACKAGE_MB=$(awk -v b="$PACKAGE_SIZE" 'BEGIN{printf "%.2f", b/1024/1024}')
+        INSTALL_MB=$(awk -v b="$INSTALL_SIZE" 'BEGIN{printf "%.2f", b/1024/1024}')
+
+        echo "📦 IPA Size: ${PACKAGE_MB} MB"
+        echo "💾 Install Size: ${INSTALL_MB} MB"
