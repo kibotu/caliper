@@ -226,7 +226,43 @@ public struct IPAParser {
         let components = filePath.split(separator: ".")
         guard let ext = components.last else { return }
         let fileExtension = String(ext).lowercased()
-        
+
+        // Is this file the container's own executable?
+        //
+        // Checked before the extension switch below, because a framework binary is
+        // named after the framework and can legitimately end in an extension that
+        // switch treats as a resource: `Data.framework/Data.json` is a 90 KB binary,
+        // not a JSON payload. Classifying it by extension filed it as a resource, so
+        // the framework's Binary Size read 0 B.
+        //
+        // The test is on the filename with its extension removed, not the whole path.
+        // A bare `hasSuffix(containerName)` cannot match a binary that carries an
+        // extension — `"Data.json".hasSuffix("Data")` is false — which is precisely the
+        // case that went wrong.
+        //
+        // Trailing slashes are excluded because the archive lists the container's own
+        // directory too, and `Data.framework/` has a stem of `Data` as well: same test,
+        // 0 bytes. It is a directory, not a binary, and recording it would overwrite the
+        // real figure whenever the archive happens to list it last.
+        let fileName = (filePath as NSString).lastPathComponent
+        let stem = (fileName as NSString).deletingPathExtension
+        let isDirectory = filePath.hasSuffix("/")
+        let isMainBinary = !isDirectory
+            && !stem.isEmpty
+            && containerName != nil
+            && stem == containerName
+
+        if isMainBinary {
+            moduleSize.binarySize = compressedSize
+            // `binarySize` gets overwritten with uncompressed LinkMap output later,
+            // so keep the compressed figure separately for the download-size total.
+            moduleSize.binaryCompressedSize = compressedSize
+            // Breadcrumb: Log main binary detection
+            fputs("  [Binary] Detected main binary: \(containerName ?? "unknown") (\(compressedSize) bytes)\n", stderr)
+            // Don't add the main binary to top files - it's already analyzed via linkmap
+            return
+        }
+
         switch fileExtension {
         case "pdf", "gif", "jpg", "jpeg", "png":
             moduleSize.imageSize += compressedSize
@@ -264,19 +300,9 @@ public struct IPAParser {
             }
             
         default:
-            // Check if it's the main binary
-            let isMainBinary = containerName != nil && filePath.hasSuffix(containerName!)
-            if isMainBinary {
-                moduleSize.binarySize = compressedSize
-                // `binarySize` gets overwritten with uncompressed LinkMap output later,
-                // so keep the compressed figure separately for the download-size total.
-                moduleSize.binaryCompressedSize = compressedSize
-                // Breadcrumb: Log main binary detection
-                fputs("  [Binary] Detected main binary: \(containerName ?? "unknown") (\(compressedSize) bytes)\n", stderr)
-                // Don't add the main binary to top files - it's already analyzed via linkmap
-            } else {
-                moduleSize.addToTop(file: filePath, size: compressedSize)
-            }
+            // Not the container's own executable, and no rule above claimed it, so it
+            // is an ordinary bundled resource.
+            moduleSize.addToTop(file: filePath, size: compressedSize)
         }
     }
 }
