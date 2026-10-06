@@ -303,11 +303,16 @@ changes the answer. A control at the top right of the Insights tab switches betw
 
 It drives the charts that have both figures — **Largest Modules** and the **App Size
 Treemap** — and it changes how a compiled asset catalog appears in **Largest Resources**,
-which is the one resource with two honest representations. Compressed, the `.car` is a
-single file in the archive and its contents are not in the download at all, so the
-container is the figure. Uncompressed, the container says nothing and the renditions are
-the expanded bytes, so the contents are the figure. Showing both at once would count the
-same bytes twice in one chart.
+which is the one resource with two honest representations.
+
+Compressed, a catalog's contents are not in the download at all: the `.car` is a single
+file in the archive, so the container is the only thing there is to show. It appears as
+one row named for its container and carrying its asset count — `ProfisBus catalog`,
+58.6 KB, 42 assets — so the figure reads as a price for those assets rather than a
+mystery. The real path is in the tooltip, since the label is a description rather than a
+filename. Uncompressed, the container says nothing and the renditions are the expanded
+bytes, so the contents are listed individually instead. Showing both at once would count
+the same bytes twice in one chart.
 
 Three things deliberately do not follow it, and are labelled with their unit instead:
 
