@@ -221,7 +221,7 @@
                         <div id="topFilesChart"></div>
                     </div>
                     <div style="min-width: 0; overflow: hidden;">
-                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Resources</h3>
+                        <h3 style="font-size: 16px; color: #666; margin-bottom: 15px;">Largest Resources <span style="font-size: 11px; color: #999; font-weight: 400;">bundle files compressed, catalog assets uncompressed</span></h3>
                         <div id="topResourcesChart"></div>
                     </div>
                 </div>
@@ -397,11 +397,6 @@
           "symbolCount" : 1
         },
         {
-          "fileName" : "StringProtocol",
-          "size" : 40,
-          "symbolCount" : 1
-        },
-        {
           "fileName" : "Array",
           "size" : 40,
           "symbolCount" : 1
@@ -412,13 +407,8 @@
           "symbolCount" : 1
         },
         {
-          "fileName" : "Data",
-          "size" : 20,
-          "symbolCount" : 1
-        },
-        {
-          "fileName" : "Range\u003c where A == Swift",
-          "size" : 20,
+          "fileName" : "StringProtocol",
+          "size" : 40,
           "symbolCount" : 1
         },
         {
@@ -428,6 +418,16 @@
         },
         {
           "fileName" : "_NSRange",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Range\u003c where A == Swift",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "Data",
           "size" : 20,
           "symbolCount" : 1
         }
@@ -482,12 +482,12 @@
           "symbolCount" : 1
         },
         {
-          "fileName" : "RawRepresentable",
+          "fileName" : "Hashable",
           "size" : 216,
           "symbolCount" : 1
         },
         {
-          "fileName" : "Hashable",
+          "fileName" : "RawRepresentable",
           "size" : 216,
           "symbolCount" : 1
         },
@@ -920,6 +920,11 @@
           "symbolCount" : 1
         },
         {
+          "fileName" : "RawRepresentable\u003c where A: Swift",
+          "size" : 40,
+          "symbolCount" : 1
+        },
+        {
           "fileName" : "Hasher",
           "size" : 40,
           "symbolCount" : 1
@@ -927,16 +932,6 @@
         {
           "fileName" : "CommandLine",
           "size" : 40,
-          "symbolCount" : 1
-        },
-        {
-          "fileName" : "RawRepresentable\u003c where A: Swift",
-          "size" : 40,
-          "symbolCount" : 1
-        },
-        {
-          "fileName" : "Character",
-          "size" : 20,
           "symbolCount" : 1
         },
         {
@@ -950,12 +945,17 @@
           "symbolCount" : 1
         },
         {
-          "fileName" : "DefaultStringInterpolation",
+          "fileName" : "_SwiftNewtypeWrapper\u003c where A: Swift",
           "size" : 20,
           "symbolCount" : 1
         },
         {
-          "fileName" : "_SwiftNewtypeWrapper\u003c where A: Swift",
+          "fileName" : "Character",
+          "size" : 20,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "DefaultStringInterpolation",
           "size" : 20,
           "symbolCount" : 1
         }
@@ -1085,7 +1085,12 @@
       "binarySize" : 5145,
       "files" : [
         {
-          "fileName" : "CustomStringConvertible",
+          "fileName" : "ConsoleLoggerConfig",
+          "size" : 0,
+          "symbolCount" : 1
+        },
+        {
+          "fileName" : "ConsoleLogger",
           "size" : 0,
           "symbolCount" : 1
         },
@@ -1095,12 +1100,7 @@
           "symbolCount" : 1
         },
         {
-          "fileName" : "ConsoleLoggerConfig",
-          "size" : 0,
-          "symbolCount" : 1
-        },
-        {
-          "fileName" : "ConsoleLogger",
+          "fileName" : "CustomStringConvertible",
           "size" : 0,
           "symbolCount" : 1
         }
@@ -1355,21 +1355,6 @@ function compiledCatalogNote(module) {
         .filter(([path]) => path.toLowerCase().endsWith('.car'))
         .reduce((sum, [, size]) => sum + (size || 0), 0);
     return compiled > 0 ? `${formatBytes(compiled)} compiled` : 'compiled size unknown';
-}
-
-// The extension is dropped so the axis's ~20-character truncation does not cut the
-// word that says what the row is. The full path is in the tooltip either way.
-function catalogLabel(carPath) {
-    const parts = carPath.split('/').filter(Boolean);
-    const container = parts.length >= 2 ? parts[parts.length - 2] : 'app';
-    const dot = container.lastIndexOf('.');
-    return `${dot > 0 ? container.slice(0, dot) : container} catalog`;
-}
-
-// The module's total across all of its catalogs, not a per-catalog count:
-// `assetCatalogFiles` is flat. Exact for the usual one-catalog bundle.
-function catalogAssetCount(module) {
-    return Object.keys(module.assetCatalogFiles || {}).length;
 }
 
 function getFileTypeInfo(filePath) {
@@ -2172,45 +2157,30 @@ function getFileTypeInfo(filePath) {
             });
             const topFiles = allFiles.sort((a, b) => b.size - a.size).slice(0, 20);
             
-            // A catalog is the one resource with two honest representations, and which is
-            // correct depends on the unit: the `.car` is one archive file and its
-            // contents are not in the download, while the renditions are the installed
-            // bytes and the container says nothing about them. So compressed, one row
-            // per catalog carrying the asset count, since a bare path at 58.6 KB is not
-            // actionable; uncompressed, the renditions individually. Listing both would
-            // count the same bytes twice. The rest of the list has only a compressed
-            // per-file figure, so the toggle moves the catalog alone.
+            // A catalog is listed as its contents, never as the `.car`: the container is a
+            // bundle, and a bundle says what it cost rather than what to change. Nothing is
+            // lost by leaving it out — its compressed size heads the Asset Catalog section
+            // of its module's panel. So the size control does not reach this list, and the
+            // heading says what the two kinds of row are worth.
             const allResources = [];
-            const byDownload = insightsSizeBasis === 'downloadSize';
             modules.forEach(module => {
                 // A framework's resources belong to its own module, not the app's list.
                 if (module.internal !== true) return;
 
                 if (module.top) {
                     Object.entries(module.top).forEach(([path, size]) => {
-                        // The archive lists directory entries at 0 B.
-                        if (path.endsWith('/')) return;
-                        if (!path.toLowerCase().endsWith('.car')) {
-                            allResources.push({
-                                name: path,
-                                size: size,
-                                module: module.name
-                            });
-                            return;
-                        }
-                        if (!byDownload) return;
+                        // The archive lists directory entries at 0 B, and a catalog is
+                        // listed below as the files it unpacks into.
+                        if (path.endsWith('/') || path.toLowerCase().endsWith('.car')) return;
                         allResources.push({
-                            name: catalogLabel(path),
+                            name: path,
                             size: size,
-                            module: module.name,
-                            catalog: true,
-                            path: path,
-                            assets: catalogAssetCount(module)
+                            module: module.name
                         });
                     });
                 }
 
-                if (!byDownload && module.assetCatalogFiles) {
+                if (module.assetCatalogFiles) {
                     Object.entries(module.assetCatalogFiles).forEach(([name, size]) => {
                         allResources.push({
                             name: name,
@@ -2287,15 +2257,9 @@ function getFileTypeInfo(filePath) {
                         tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Module: ${escapeHtml(d.module)}</div>`;
                     }
                     if (d.inCatalog) {
+                        // Only the expanded bytes are recorded per asset, so a row read as
+                        // compressed would be wrong by the catalog's compression ratio.
                         tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">In compiled asset catalog, uncompressed</div>`;
-                    }
-                    if (d.catalog) {
-                        // The label names a container, so the count is what makes the row worth
-                        // reading and the path is where to go looking.
-                        tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Compiled asset catalog, ${d.assets} asset${d.assets === 1 ? '' : 's'}, compressed</div>`;
-                        if (d.path) {
-                            tooltipContent += `<div style="margin-top: 5px; color: #999; word-break: break-all;">${escapeHtml(d.path)}</div>`;
-                        }
                     }
                     tooltip.html(tooltipContent)
                         .classed('visible', true)
@@ -2327,8 +2291,7 @@ function getFileTypeInfo(filePath) {
                     return name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
                 })
                 .append('title')
-                // The path a catalog row was collapsed from; the label is not a real filename.
-                .text(d => d.path || d[nameKey]);
+                .text(d => d[nameKey]);
             
             g.selectAll('.size-label')
                 .data(data)
