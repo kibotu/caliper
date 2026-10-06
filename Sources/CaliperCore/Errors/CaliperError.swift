@@ -1,6 +1,5 @@
 import Foundation
 
-/// Errors that can occur during Caliper execution
 public enum CaliperError: Error, LocalizedError {
     case unzipFailed
     case invalidIPA

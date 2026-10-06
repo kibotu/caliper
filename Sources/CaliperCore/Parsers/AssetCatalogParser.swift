@@ -1,10 +1,7 @@
 import Foundation
 
-/// Parser for .car asset catalog files
 public struct AssetCatalogParser {
-    /// Parse an asset catalog file and add the results to the module
     public func parse(filePath: String, moduleSize: ModuleSize) throws {
-        // Breadcrumb: Starting .car file parsing
         let fileName = (filePath as NSString).lastPathComponent
         fputs("    [assetutil] Starting parse of \(fileName)...\n", stderr)
         
@@ -43,7 +40,6 @@ public struct AssetCatalogParser {
             throw CaliperError.assetCatalogParsingFailed("Failed to start assetutil: \(error)")
         }
         
-        // Wait with timeout
         let timeout: TimeInterval = 10.0
         let startTime = Date()
         
@@ -51,11 +47,9 @@ public struct AssetCatalogParser {
             Thread.sleep(forTimeInterval: 0.1)
         }
         
-        // Clean up handlers
         pipe.fileHandleForReading.readabilityHandler = nil
         errorPipe.fileHandleForReading.readabilityHandler = nil
-        
-        // Terminate if still running
+
         if process.isRunning {
             process.terminate()
             Thread.sleep(forTimeInterval: 0.2)
@@ -63,7 +57,6 @@ public struct AssetCatalogParser {
             throw CaliperError.assetCatalogParsingFailed("assetutil timed out after \(Int(timeout))s")
         }
         
-        // Check exit code
         guard process.terminationStatus == 0 else {
             let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
             fputs("    [assetutil] ⚠️  Failed with exit code \(process.terminationStatus): \(errorOutput)\n", stderr)
@@ -80,10 +73,7 @@ public struct AssetCatalogParser {
         fputs("    [assetutil] ✅ Completed\n", stderr)
     }
     
-    // MARK: - Private Methods
-    
     private func parseAssetOutput(_ output: String, moduleSize: ModuleSize) throws {
-        // Drop first line (header) and parse JSON array
         let lines = output.components(separatedBy: .newlines)
         guard lines.count > 1 else { return }
         
@@ -100,17 +90,10 @@ public struct AssetCatalogParser {
 
             let size = Int64(sizeOnDisk)
 
-            // Record what is inside the catalog, one entry per asset. This is what the
-            // report lists instead of the .car itself: a catalog is a bundle, and a
-            // bundle tells you nothing about what it costs you. The .car stays in `top`
-            // so the download total still counts its compressed size.
-            //
-            // Display only. `SizeOnDisk` is the rendition's size after the catalog has
-            // been expanded, so these are uncompressed and must not reach `top` or
-            // `resources`, which are compressed figures that feed `downloadSize`.
+            // `SizeOnDisk` is the rendition expanded, so these figures are uncompressed
+            // and must not reach the compressed dictionaries that feed `downloadSize`.
             moduleSize.assetCatalogFiles[name, default: 0] += size
 
-            // Image totals are only meaningful for the recognised image types.
             let components = name.split(separator: ".")
             guard let ext = components.last else { continue }
             let fileExtension = String(ext).lowercased()

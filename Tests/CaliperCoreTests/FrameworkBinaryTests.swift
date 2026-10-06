@@ -2,13 +2,9 @@ import Foundation
 import Testing
 @testable import CaliperCore
 
-/// A framework is analysed like any other module, and its container directory must not
-/// be mistaken for its executable.
-///
 /// The archive lists both `Foo.framework/` and `Foo.framework/Foo`, and both reduce to
-/// the same stem, so a name comparison cannot tell them apart. The directory entry is 0
-/// bytes, so recording it as the binary overwrites the real figure whenever the archive
-/// happens to list it last — which varies with how the IPA was built.
+/// the same stem, so the directory entry can overwrite the real binary figure whenever
+/// the archive happens to list it last — which varies with how the IPA was built.
 @Suite("Framework binaries")
 struct FrameworkBinaryTests {
 
@@ -31,7 +27,7 @@ struct FrameworkBinaryTests {
         """)
 
         #expect(module.binaryCompressedSize == 45000)
-        // The binary is not also listed as a file, which would double-count it.
+        // Not also listed as a file, which would double-count it.
         #expect(module.downloadSize == 45000)
     }
 
@@ -47,9 +43,8 @@ struct FrameworkBinaryTests {
         #expect(module.downloadSize == 45000)
     }
 
-    /// A framework binary is named after the framework, so it can end in an extension the
-    /// categoriser treats as a resource. This one is a 90 KB executable, not a JSON
-    /// payload, and reading it as a resource left the binary size at 0.
+    /// The binary is named after the framework, so it can end in an extension the
+    /// categoriser treats as a resource.
     @Test("a binary whose name ends in a resource extension is still a binary")
     func resourceLookingBinaryRecognised() throws {
         let module = try module("""
@@ -57,13 +52,11 @@ struct FrameworkBinaryTests {
         """)
 
         #expect(module.binaryCompressedSize == 90015)
-        // Not filed as a JSON resource.
         #expect(module.resources["json"] == nil)
         #expect(module.downloadSize == 90015)
     }
 
-    /// A `.plist` alongside the binary must still be counted as a resource. The binary
-    /// check is deliberately narrow, so it cannot swallow the framework's real resources.
+    /// The binary check is deliberately narrow: it cannot swallow real resources.
     @Test("a framework's other resources are still counted")
     func frameworkResourcesStillCounted() throws {
         let module = try module("""

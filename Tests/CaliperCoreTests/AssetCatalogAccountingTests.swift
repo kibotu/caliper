@@ -3,22 +3,14 @@ import Testing
 @testable import CaliperCore
 
 /// A `.car` is a file in the IPA, so it belongs in the download total at its compressed
-/// size. `assetutil` describes the catalog's *contents* once expanded, so those figures
-/// describe installed size.
-///
-/// These two were previously conflated: the per-asset uncompressed numbers were added to
-/// the compressed dictionaries, so an asset catalog's contribution to the download was
-/// overstated by its compression ratio and the catalog itself was absent entirely.
-/// Measured on a compiled catalog: 1,608 uncompressed asset bytes were reported against
-/// a 940-byte compressed file in the IPA.
+/// size. `assetutil` describes the catalog's contents once expanded, so its figures
+/// describe installed size and the two must not be mixed.
 @Suite("Asset catalog accounting")
 struct AssetCatalogAccountingTests {
 
-    /// `buildAppSizeReport` reads the listing `unzip -v` produces, so a real IPA is not
-    /// needed to exercise the accounting. `unzippedPath` points nowhere: the `.car` is
-    /// not a real file, so `assetutil` fails and the parser's error path runs. That is
-    /// deliberate — the compressed size must be recorded whether or not the catalog can
-    /// be parsed.
+    /// No real IPA is needed: `buildAppSizeReport` reads the listing `unzip -v` emits.
+    /// `unzippedPath` points nowhere, so `assetutil` fails — deliberately, since the
+    /// compressed size must be recorded either way.
     private func report(for listing: String) throws -> ModuleSize {
         let report = try IPAParser().buildAppSizeReport(
             report: listing,
@@ -41,7 +33,6 @@ struct AssetCatalogAccountingTests {
 
     @Test("a catalog the listing cannot parse still counts")
     func unparseableCatalogStillCounts() throws {
-        // No catalog on disk, so assetutil fails. The bytes still shipped in the IPA.
         let module = try report(for: "19576 940 Payload/Demo.app/Assets.car")
 
         #expect(module.downloadSize == 940)
@@ -49,16 +40,12 @@ struct AssetCatalogAccountingTests {
 
     @Test("a failed catalog parse does not invent download bytes")
     func failedParseAddsNothing() throws {
-        // Without assetutil there is no per-asset detail at all. The download must be
-        // the compressed file size alone, not a sum of figures that were never read.
         let module = try report(for: "19576 940 Payload/Demo.app/Assets.car")
 
         #expect(module.top.count == 1)
         #expect(module.imageFileSize == 0)
     }
 
-    /// The whole point of the split: the two figures measure different things and must
-    /// not be derived from one another.
     @Test("download and install size are independent figures")
     func downloadAndInstallAreIndependent() throws {
         let module = try report(for: """
@@ -66,17 +53,12 @@ struct AssetCatalogAccountingTests {
         1200 150 Payload/Demo.app/Demo
         """)
 
-        // Download is compressed, straight from the listing.
         #expect(module.downloadSize == 940 + 150)
-        // Install is uncompressed, also from the listing.
         #expect(module.installSize == 19576 + 1200)
-        // Neither is a multiple of the other here, which is the regression in one line:
-        // an uncompressed number in the download total is detectable exactly this way.
+        // An uncompressed figure in the download total is detectable exactly this way.
         #expect(module.installSize / module.downloadSize > 1)
     }
 
-    /// Loose images in the bundle are still recorded both ways, as before. Only the
-    /// catalog path changed.
     @Test("a loose image still records both a compressed and an uncompressed size")
     func looseImageUnchanged() throws {
         let module = try report(for: "4096 900 Payload/Demo.app/logo.png")
@@ -86,9 +68,6 @@ struct AssetCatalogAccountingTests {
         #expect(module.downloadSize == 900)
     }
 
-    /// `assetCatalogFiles` is display-only. If it were ever summed into a total, an
-    /// uncompressed figure would leak back into the compressed accounting, which is the
-    /// defect this suite exists to prevent.
     @Test("catalog contents are kept out of the totals")
     func catalogContentsAreNotTotals() {
         let module = ModuleSize(name: "Demo")

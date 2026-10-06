@@ -1,9 +1,8 @@
 import Foundation
 
-/// Represents app information extracted from Info.plist
 public struct AppInfo: Codable {
     public let appName: String?
-    public let appModuleName: String?  // Name extracted from .app directory
+    public let appModuleName: String?
     public let version: String?
     public let buildNumber: String?
     public let bundleIdentifier: String?
@@ -26,7 +25,6 @@ public struct AppInfo: Codable {
         case appName, appModuleName, version, buildNumber, bundleIdentifier
     }
     
-    /// Computed property for displaying version info
     public var versionString: String? {
         if let version, let build = buildNumber {
             return "\(version) (\(build))"

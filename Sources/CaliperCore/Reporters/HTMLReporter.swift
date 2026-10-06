@@ -1,24 +1,17 @@
 import Foundation
 
-/// Reporter for generating HTML output
 public struct HTMLReporter {
     public init() {}
 
-    /// Generate HTML report from JSON data.
-    ///
-    /// The result is a single self-contained file: d3 is inlined from the package's
-    /// own resources and the report data is embedded, so the report opens with no
-    /// network access at all.
+    /// One self-contained file: d3 is inlined and the data embedded, so the report
+    /// opens with no network access.
     public func generate(jsonString: String, outputPath: String) throws {
         let html = htmlTemplate
             .replacingOccurrences(of: "__D3__", with: try Self.vendoredD3())
-            // Escaping `<` keeps a module name containing `</script>` from closing
-            // the enclosing tag and injecting markup.
             .replacingOccurrences(of: "__DATA__", with: jsonString.htmlSafe())
         try html.write(toFile: outputPath, atomically: true, encoding: .utf8)
     }
 
-    /// The vendored d3 bundle.
     static func vendoredD3() throws -> String {
         guard let url = vendoredD3URL(),
               let contents = try? String(contentsOf: url, encoding: .utf8) else {
@@ -30,7 +23,6 @@ public struct HTMLReporter {
     private static let bundleName = "caliper_CaliperCore"
     private static let d3ResourceName = "d3.v7.min"
 
-    /// An empty class used only to locate the bundle this code is linked into.
     private final class BundleMarker {}
 
     private static var candidatesForBundle: [URL] {
@@ -44,51 +36,27 @@ public struct HTMLReporter {
         return candidates
     }
 
-    /// The vendored d3 inside the bundle at `root`, or `nil` when it is not there.
-    ///
-    /// Asked of `Bundle` rather than reached by appending the file name to the bundle's
-    /// directory, because the ways this package reaches a user disagree about where the
-    /// resources sit. `swift build` and the release archive leave them in the bundle's
-    /// root; `mint install` builds a real Apple bundle and puts them under
-    /// `Contents/Resources`. Appending a name finds the first and misses the second, so
-    /// every Mint install wrote its JSON report and then failed the HTML one with
-    /// `invalidOutput` — a layout a `swift build` on CI never produces, which is why the
-    /// release verification passed while the documented install path did not.
+    /// Resolved through `Bundle`, which knows both layouts this package ships in:
+    /// `swift build` and the release archive put resources in the bundle's root, while
+    /// `mint install` builds an Apple bundle with them under `Contents/Resources`.
     static func d3URL(inBundleAt root: URL) -> URL? {
         Bundle(url: root)?.url(forResource: d3ResourceName, withExtension: "js")
     }
 
-    /// The vendored d3, from the first candidate bundle that actually holds it.
+    /// The first candidate that resolves d3 itself. `Bundle(url:)` answers for any
+    /// directory that exists, so testing the directory would accept an empty leftover
+    /// and shadow the real bundle.
     ///
-    /// Resolving the file rather than the directory is what makes the candidate test
-    /// worth anything: `Bundle(url:)` returns a value for any directory that exists, so
-    /// "there is a `caliper_CaliperCore.bundle` over there" would be satisfied by an empty
-    /// leftover shadowing the real one. Asking for d3 is the question that matters.
-    ///
-    /// The documented layout is a `caliper_CaliperCore.bundle` beside the executable,
-    /// which is what a release download and a `mint install` both produce, so that is
-    /// searched first and `Bundle.module` is only the fallback.
-    ///
-    /// The fallback is not redundant. SwiftPM generates its resource accessor per build
-    /// system: the one compiled here bakes the bundle's absolute path in at build time
-    /// and searches `Bundle.main` before it, so under `swift test` the bundle is found
-    /// nowhere near the executable. Reimplementing that is not worth it, and
-    /// `Bundle.module`'s `fatalError` is what makes the order matter — reaching it only
-    /// when the bundle is genuinely absent keeps the crash to the case where it is
-    /// correct, instead of the case where the bundle is present but not where SwiftPM
-    /// happened to look.
+    /// `Bundle.module` is the fallback, not a peer: SwiftPM bakes the bundle's absolute
+    /// path into the accessor, which is the only way `swift test` finds it. It traps
+    /// when the bundle is absent, so it must be reached last.
     static func vendoredD3URL() -> URL? {
         for candidate in candidatesForBundle {
             let url = candidate.appendingPathComponent(bundleName + ".bundle")
             if let d3 = d3URL(inBundleAt: url) { return d3 }
         }
-        // `Bundle.module` traps when the bundle is absent, so it must stay last: it
-        // resolves the paths these candidates cannot know about — chiefly the one baked
-        // in at compile time, which is the only way `swift test` finds the bundle.
         return Bundle.module.url(forResource: d3ResourceName, withExtension: "js")
     }
-    
-    // MARK: - HTML Template
     
     private let htmlTemplate = """
 <!DOCTYPE html>
@@ -105,7 +73,6 @@ public struct HTMLReporter {
         header { background: linear-gradient(135deg, #063773 0%, #0a5aa8 100%); color: white; padding: 30px; }
         header h1 { font-size: 32px; margin-bottom: 10px; }
         
-        /* Tabs */
         .tabs { display: flex; background: #f8f9fa; border-bottom: 2px solid #e0e0e0; }
         .tab { padding: 15px 30px; cursor: pointer; font-weight: 600; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; }
         .tab:hover { color: #063773; background: rgba(6, 55, 115, 0.05); }
@@ -125,7 +92,6 @@ public struct HTMLReporter {
         .controls input { padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; flex: 1; min-width: 200px; }
         .controls select { padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer; }
         
-        /* Filter Chips */
         .filter-chips { display: flex; gap: 10px; flex-wrap: wrap; }
         .filter-chip { padding: 8px 16px; border: 2px solid #e0e0e0; border-radius: 20px; font-size: 13px; font-weight: 600; color: #666; background: white; cursor: pointer; transition: all 0.2s; user-select: none; }
         .filter-chip:hover { border-color: #063773; color: #063773; background: #f0f6ff; }
@@ -141,11 +107,9 @@ public struct HTMLReporter {
         .module-name-row { font-size: 16px; font-weight: 600; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .module-version { color: #063773; }
         .owner-badge { display: inline-flex; align-items: center; padding: 4px 10px; background: linear-gradient(135deg, #063773 0%, #0a5aa8 100%); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(6, 55, 115, 0.2); flex-shrink: 0; }
-        /* A co-owner rather than the primary one. Lighter, so the order reads without a
-           second label saying "also". */
+        /* A co-owner: lighter, so the order reads without a second label saying "also". */
         .owner-badge.additional { background: linear-gradient(135deg, #0a5aa8 0%, #3498db 100%); }
         .owner-badge.owner-badge-filter { cursor: pointer; }
-        /* The team this click would filter to, so the badge does not just look clickable. */
         .owner-badge.owner-badge-filter:hover { filter: brightness(1.15); }
         .owner-badge.team-selected { outline: 2px solid #f39c12; outline-offset: 1px; }
         .internal-badge { display: inline-flex; align-items: center; padding: 4px 10px; background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(155, 89, 182, 0.2); flex-shrink: 0; }
@@ -187,9 +151,8 @@ public struct HTMLReporter {
         
         .top-files { margin-top: 20px; }
         .top-files h4 { font-size: 16px; margin-bottom: 15px; color: #333; display: flex; align-items: center; gap: 10px; }
-        /* The compressed size of the compiled catalog the rows beneath were unpacked
-           from. A note rather than a figure of its own: `top` already counts the .car in
-           the download total, and this is those same bytes, not an addition to them. */
+        /* Compressed size of the compiled catalog the rows beneath were unpacked from.
+           Already in `top`, so already in the download total: annotate, do not add. */
         .top-files h4 .catalog-note { color: #666; font-size: 12px; font-weight: 400; }
         .file-item { display: flex; justify-content: space-between; padding: 10px; background: white; margin-bottom: 5px; border-radius: 4px; font-size: 13px; border-left: 4px solid #e0e0e0; transition: all 0.2s; }
         .file-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
@@ -197,7 +160,6 @@ public struct HTMLReporter {
         .file-size-value { color: #333; font-weight: 500; margin-left: 15px; }
         .file-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-right: 8px; }
         
-        /* File type colors */
         .file-type-image { border-left-color: #3498db; }
         .file-type-image .file-type-badge { background: #e3f2fd; color: #1976d2; }
         
@@ -222,7 +184,6 @@ public struct HTMLReporter {
         .no-results { text-align: center; padding: 60px 20px; color: #999; font-size: 16px; }
         .no-data { padding: 15px; color: #999; font-style: italic; text-align: center; }
         
-        /* D3 Chart Styles */
         .d3-tooltip {
             position: absolute;
             background: rgba(0, 0, 0, 0.9);
@@ -400,13 +361,11 @@ public struct HTMLReporter {
         let currentTab = 'breakdown';
         let currentSort = 'downloadSize';
         let breakdownFilters = { internal: true, external: true, owned: true, unowned: true };
-        // The team the breakdown is filtered to, or '' for all of them. Drives both the
-        // dropdown and the owner badges, so the two cannot disagree.
+        // '' means no team filter. Drives the dropdown and the badges together.
         let breakdownTeamFilter = '';
         let insightsFilters = { internal: true, external: true };
         let ownershipFilters = { internal: true, external: true };
         
-        // Update header with app info if available
         function updateHeader() {
             if (data.appInfo) {
                 const appInfo = data.appInfo;
@@ -443,13 +402,12 @@ public struct HTMLReporter {
             if (el) el.classList.add('active');
             document.getElementById(tabName).classList.add('active');
 
-            // The Insights charts are static, so render them once. Re-rendering on every
-            // visit appended a fresh set of tooltip elements each time, growing the DOM
-            // without bound. The flag is set before the timer is scheduled, so a second
-            // click while this one is pending cannot queue a duplicate render.
+            // Rendered once: the charts are static, and re-rendering on every visit
+            // appended a fresh set of tooltips each time. The flag is set before the
+            // timer, so a second click cannot queue a duplicate render.
             if (tabName === 'insights' && !insightsRendered) {
                 insightsRendered = true;
-                // Wait for the tab to become visible so the charts can measure it.
+                // Deferred so the tab is laid out and the charts can measure it.
                 setTimeout(renderInsights, 100);
             }
         }
@@ -468,7 +426,6 @@ public struct HTMLReporter {
             return div.innerHTML;
         }
         
-        // Filter functions
         function toggleBreakdownFilter(filter) {
             breakdownFilters[filter] = !breakdownFilters[filter];
             document.querySelectorAll('#breakdown .filter-chip').forEach(chip => {
@@ -504,16 +461,12 @@ public struct HTMLReporter {
             ownerGroupData = prepareOwnerGroupData(currentOwnershipSort);
             renderOwnershipChart();
             populateOwnerDropdown();
-            // Reset detail view
             document.getElementById('ownerDropdown').value = '';
             document.getElementById('ownerDetailSection').style.display = 'none';
         }
-        
-        // Every owner of a module, primary first and de-duplicated.
-        //
-        // `additionalOwners` comes from the `owners: [a, b]` form of an ownership entry;
-        // a module with a single owner carries no such field. The primary is skipped when
-        // it repeats, which a hand-written file can easily do.
+
+        // Primary first, de-duplicated: a hand-written file can repeat the primary in
+        // `additionalOwners`.
         function allOwners(module) {
             const owners = [];
             if (module.owner) owners.push(module.owner);
@@ -523,7 +476,7 @@ public struct HTMLReporter {
             return owners;
         }
 
-        // Every team named anywhere in the report, for the team filter's options.
+        // Includes co-owners, who are never a module's primary.
         function collectAllTeams() {
             const teams = new Set();
             Object.values(data.modules).forEach(module => {
@@ -532,9 +485,7 @@ public struct HTMLReporter {
             return [...teams].sort((a, b) => a.localeCompare(b));
         }
 
-        // The team the breakdown is filtered to, shared by the dropdown and the badges.
-        // Clicking the team that is already selected clears the filter, so a badge
-        // toggles rather than latching.
+        // Clicking the selected team clears the filter, so a badge toggles.
         function selectTeamFilter(team) {
             breakdownTeamFilter = breakdownTeamFilter === team ? '' : (team || '');
             document.getElementById('teamFilterSelect').value = breakdownTeamFilter;
@@ -551,20 +502,15 @@ public struct HTMLReporter {
                 option.textContent = team;
                 select.appendChild(option);
             });
-            // An option can disappear when a filter elsewhere empties a team out, which
-            // would leave the select blank rather than showing the filter that is active.
+            // A filter elsewhere can empty a team out and drop its option, which would leave
+            // the select blank rather than showing the filter that is active.
             select.value = current;
             if (select.value !== current) breakdownTeamFilter = '';
         }
 
-        // The owner badges on a module card: one per owner, co-owners in a lighter
-        // gradient.
-        //
-        // `filterable` adds the behaviour that turns a badge into the team filter. It is
-        // on for the breakdown cards and off for the owner detail cards: those are on the
-        // Ownership tab, where the breakdown filter does not apply, so a badge that looked
-        // clickable there would do nothing when clicked. As a plain badge it still answers
-        // the question the reader has — this module is also owned by another team.
+        // `filterable` is off for the owner detail cards: those sit on the Ownership tab,
+        // where the breakdown filter does not apply, so a badge that looked clickable
+        // there would do nothing.
         function renderOwnerBadges(module, filterable = true) {
             const owners = allOwners(module);
             if (!owners.length) return '';
@@ -580,19 +526,15 @@ public struct HTMLReporter {
         }
 
         function moduleMatchesBreakdownFilters(module) {
-            // Check internal/external filter
             const isInternal = module.internal === true;
             const internalMatch = (isInternal && breakdownFilters.internal) || (!isInternal && breakdownFilters.external);
             if (!internalMatch) return false;
 
-            // Check owned/unowned filter
             const isOwned = module.owner && module.owner.toLowerCase() !== 'others';
             const ownedMatch = (isOwned && breakdownFilters.owned) || (!isOwned && breakdownFilters.unowned);
             if (!ownedMatch) return false;
 
-            // Check the team filter. A module matches on any of its owners, so a shared
-            // module stays visible to both teams rather than being hidden from whichever
-            // one is not listed first.
+            // Matches on any owner, so a shared module stays visible to both teams.
             if (breakdownTeamFilter && !allOwners(module).includes(breakdownTeamFilter)) return false;
 
             return true;
@@ -608,19 +550,10 @@ public struct HTMLReporter {
             return (isInternal && ownershipFilters.internal) || (!isInternal && ownershipFilters.external);
         }
         
-        // The files a module ships, split by kind, as the module panel lists them.
-//
-// `top` holds the real files in the bundle. A `.car` is a compiled asset catalog, and a
-// directory entry is a 0 B artefact of the archive listing, so neither is a file worth
-// listing. The catalog's own contents are listed in its place instead, because a
-// container tells you nothing about what it costs.
-//
-// Two sections rather than one list with a marker on the catalog rows. A marker has to
-// be glued to the file name to be visible, and the name is what the type badge is
-// derived from: appending "(in catalog)" to "bus.svg" made the extension parse as
-// "svg (in catalog)", which matched nothing, so every asset lost its type and its
-// colour. Separate sections need no marker, so the name stays a name.
-function renderModuleResources(module) {
+        // Two sections, not one list with a marker on the catalog rows: a marker has to
+        // be glued to the file name, and the name is what the type badge is derived from,
+        // so "bus.svg (in catalog)" matched no file type and lost every asset its colour.
+        function renderModuleResources(module) {
     const files = Object.entries(module.top || {})
         .filter(([path]) => !path.toLowerCase().endsWith('.car') && !path.endsWith('/'))
         .sort((a, b) => b[1] - a[1]);
@@ -652,10 +585,8 @@ function renderResourceRow([path, size]) {
     return `<div class="file-item ${fileInfo.class}"><span class="file-path" title="${escapeHtml(path)}"><span class="file-type-badge">${fileInfo.label}</span>${escapeHtml(path)}</span><span class="file-size-value">${formatBytes(size)}</span></div>`;
 }
 
-// The size of the compiled catalog these rows were unpacked from, at the compressed
-// size the IPA listing reports for it. That is the figure that reaches the download
-// total, and the rows beneath it are the same bytes expanded — so this is a note
-// explaining their unit, not a figure to add to them.
+// Compressed size of the .car these rows were unpacked from. The rows are the same
+// bytes expanded, so this annotates their unit rather than adding to them.
 function compiledCatalogNote(module) {
     const compiled = Object.entries(module.top || {})
         .filter(([path]) => path.toLowerCase().endsWith('.car'))
@@ -663,14 +594,8 @@ function compiledCatalogNote(module) {
     return compiled > 0 ? `${formatBytes(compiled)} compiled` : 'compiled size unknown';
 }
 
-// How a catalog is named when it has to appear as a single entry rather than a list of
-// its contents. The path on its own reads as a file, and a file is the wrong thing to
-// point someone at: the entry is a container, and saying so is what keeps it from being
-// mistaken for something that can be deleted.
-//
-// The container's extension is dropped because the chart's axis truncates labels to
-// about twenty characters, and `ProfisBus.bundle asset catalog` loses the one word that
-// says what the row is. The full path is in the tooltip either way.
+// The extension is dropped so the axis's ~20-character truncation does not cut the
+// word that says what the row is. The full path is in the tooltip either way.
 function catalogLabel(carPath) {
     const parts = carPath.split('/').filter(Boolean);
     const container = parts.length >= 2 ? parts[parts.length - 2] : 'app';
@@ -678,75 +603,57 @@ function catalogLabel(carPath) {
     return `${dot > 0 ? container.slice(0, dot) : container} catalog`;
 }
 
-// How many assets a module's catalog holds. This is the module's total across all of
-// its catalogs, not a per-catalog count, because `assetCatalogFiles` is a flat dictionary
-// keyed by rendition name. A module with one catalog — the usual shape, since a bundle
-// ships one `Assets.car` — is exact. A module with two reports the sum, which is the
-// number that would be actionable anyway.
+// The module's total across all of its catalogs, not a per-catalog count:
+// `assetCatalogFiles` is flat. Exact for the usual one-catalog bundle.
 function catalogAssetCount(module) {
     return Object.keys(module.assetCatalogFiles || {}).length;
 }
 
 function getFileTypeInfo(filePath) {
-            // A name with no dot has no extension. `split('.').pop()` hands back the whole
-            // name in that case, so a colour set named AccentColor was badged ACCENTCOLOR.
+            // `split('.').pop()` would return a dotless name whole, badging AccentColor
+            // as ACCENTCOLOR.
             const name = filePath.split('/').pop();
             const dot = name.lastIndexOf('.');
             const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
             
-            // Image files
             if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'heic', 'heif', 'webp', 'bmp', 'tiff', 'tif'].includes(ext)) {
                 return { type: 'image', label: ext.toUpperCase(), class: 'file-type-image' };
             }
             
-            // Lottie/JSON files (check if JSON is likely an animation)
             if (ext === 'json') {
-                // Assume JSON files in asset catalogs are likely Lottie animations
+                // Name is the only signal: a .json in a bundle is usually Lottie.
                 if (filePath.toLowerCase().includes('lottie') || filePath.toLowerCase().includes('animation')) {
                     return { type: 'lottie', label: 'LOTTIE', class: 'file-type-lottie' };
                 }
                 return { type: 'lottie', label: 'JSON', class: 'file-type-lottie' };
             }
             
-            // PDF files
             if (ext === 'pdf') {
                 return { type: 'pdf', label: 'PDF', class: 'file-type-pdf' };
             }
             
-            // Video files
             if (['mp4', 'mov', 'avi', 'mkv', 'm4v', 'mpg', 'mpeg', 'wmv', 'webm'].includes(ext)) {
                 return { type: 'video', label: ext.toUpperCase(), class: 'file-type-video' };
             }
             
-            // Audio files
             if (['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'aiff', 'wma'].includes(ext)) {
                 return { type: 'audio', label: ext.toUpperCase(), class: 'file-type-audio' };
             }
             
-            // Font files
             if (['ttf', 'otf', 'woff', 'woff2', 'eot'].includes(ext)) {
                 return { type: 'font', label: ext.toUpperCase(), class: 'file-type-font' };
             }
             
-            // Other files. A name with no extension is labelled by where it came from
-            // rather than by the name itself, which is not a file type.
+            // A dotless name is not a file type, so it is labelled by where it came from.
             return { type: 'other', label: ext ? ext.toUpperCase() : 'ASSET', class: 'file-type-other' };
         }
         
         function calculateModuleDownload(module) {
-            // Compressed size of every file this module owns: the main binary plus the
-            // files in `top`. `binarySize` is excluded because with a LinkMap it holds
-            // uncompressed output, which would mix units in one figure.
-            //
-            // `binaryCompressedSize` is counted here because `top` deliberately omits
-            // the main binary, so a framework that ships nothing but a binary would
-            // otherwise report zero download bytes.
-            //
-            // A statically linked module has no container, so that sum is legitimately
-            // zero and the figure would say nothing. It has a measured size, so report
-            // it. The two branches are different units — compressed where a compressed
-            // size exists, uncompressed otherwise — which is why the flag is checked
-            // rather than the two being summed together.
+            // Compressed where a compressed figure exists. `binarySize` is excluded: with a
+            // LinkMap it holds uncompressed output. `top` omits the main binary, so
+            // `binaryCompressedSize` is counted here or a binary-only framework reports
+            // zero. A statically linked module has no container, so that sum is zero and
+            // says nothing; its LinkMap size is uncompressed and is reported instead.
             if (module.staticallyLinked === true) return module.binarySize || 0;
             let total = (module.binaryCompressedSize || 0);
             if (!module.top) return total;
@@ -754,13 +661,9 @@ function getFileTypeInfo(filePath) {
         }
 
         function calculateModuleTotal(module) {
-            // `proguard` is the module's install size: the sum of the uncompressed
-            // size of every file attributed to it, plus the LinkMap binary size for
-            // modules that ship no bundle. It is computed once on the Swift side.
-            //
-            // This used to be `binarySize + imageFileSize + sum(resources)`, which
-            // double-counted images, because the parsers record each image in both
-            // `imageFileSize` and `resources`.
+            // Already the uncompressed sum, computed once on the Swift side. It must not be
+            // recomputed here as `binarySize + imageFileSize + sum(resources)`, which
+            // double-counts images: the parsers record each in both places.
             return module.proguard || 0;
         }
         
@@ -770,12 +673,10 @@ function getFileTypeInfo(filePath) {
             const allModules = Object.values(data.modules);
             const moduleCount = allModules.length;
 
-            // Calculate internal totals
             const internalModules = allModules.filter(m => m.internal === true);
             const internalCount = internalModules.length;
             const internalInstallSize = internalModules.reduce((sum, m) => sum + calculateModuleTotal(m), 0);
-            
-            // Download size is the sum of each module's download size.
+
             const internalDownloadSize = internalModules.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
             
             document.getElementById('summary').innerHTML = `
@@ -808,7 +709,6 @@ function getFileTypeInfo(filePath) {
                 modules = modules.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
             }
             
-            // Apply breakdown filters
             modules = modules.filter(m => moduleMatchesBreakdownFilters(m));
             
             modules.sort((a, b) => {
@@ -837,9 +737,7 @@ function getFileTypeInfo(filePath) {
                 const binaryPercent = maxSize > 0 ? (module.binarySize || 0) / maxSize * 100 : 0;
                 const imagePercent = maxSize > 0 ? (module.imageFileSize || 0) / maxSize * 100 : 0;
                 
-                // Resource breakdown by type. Named apart from the "Resources" list below,
-                // which is the resources themselves: the two are different things and one
-                // heading cannot carry both.
+                // Named "Resource Types" to keep it distinct from the "Resources" list below.
                 const resourcesHTML = Object.keys(module.resources || {}).length > 0 ? `
                     <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resource Types</h4>
                     <div class="resources-grid">
@@ -852,11 +750,9 @@ function getFileTypeInfo(filePath) {
                         `).join('')}
                     </div>
                 ` : '';
-                
-                // The module's resources, and its asset catalog's contents
+
                 const topFilesHTML = renderModuleResources(module);
-                
-                // Source files from LinkMap (show ALL files)
+
                 const sourceFiles = module.files || [];
                 const filesHTML = sourceFiles.length > 0 ? `
                     <div class="files-section">
@@ -874,8 +770,7 @@ function getFileTypeInfo(filePath) {
                     </div>
                 ` : '';
                 
-                // Determine which size to display based on current sort. The displayed figure
-                // must come from the same function the sort used, or the column
+                // Must come from the same function the sort used, or the column
                 // contradicts its own ordering.
                 const displaySize = currentSort === 'installSize'
                     ? calculateModuleTotal(module)
@@ -953,24 +848,15 @@ function getFileTypeInfo(filePath) {
             renderModules(document.getElementById('searchInput').value, e.target.value);
         });
         
-        // Ownership Tab Functions
-        // Two groupings, deliberately different.
-        //
-        // The chart answers "how is the app split", so it counts each module once, under
-        // its primary owner. The teams partition the app and the bars sum to its total.
-        //
-        // The per-team list answers "what is this team responsible for", so it counts a
-        // shared module in full for every team that owns it. Those totals deliberately sum
-        // to more than the app, because splitting a framework between two teams would
-        // need a share of the bytes that does not exist. Collapsing the two groupings into
-        // one would mean either the chart double-counts or the list under-reports a team,
-        // so they stay apart and the tab says which is which.
+        // Two groupings, on purpose: the chart partitions the app by primary owner so
+        // its bars sum to the app, while the per-team list attributes a shared module
+        // in full to every team that owns it, so its totals exceed the app. Collapsing
+        // them would mean either double-counting or under-reporting a team.
         let ownershipChartData = [];
         let ownerGroupData = [];
         let currentOwnershipSort = 'downloadSize';
 
-        // Sums a team's modules. Same two functions the breakdown tab uses, so a team's
-        // totals agree with the module cards beneath them.
+        // Same two size functions the breakdown tab uses, so the totals agree.
         function summariseOwner(name, moduleList) {
             return {
                 name: name,
@@ -989,7 +875,6 @@ function getFileTypeInfo(filePath) {
             return ownerData.sort((a, b) => b.totalDownloadSize - a.totalDownloadSize);
         }
 
-        // Primary owner only, so the chart's bars add up to the app.
         function prepareOwnershipChartData(sortBy = 'downloadSize') {
             const modulesByOwner = {};
             let hasOwners = false;
@@ -1012,7 +897,6 @@ function getFileTypeInfo(filePath) {
             );
         }
 
-        // Every owner, so a shared module is attributed to each team in full.
         function prepareOwnerGroupData(sortBy = 'downloadSize') {
             const modulesByOwner = {};
 
@@ -1048,10 +932,8 @@ function getFileTypeInfo(filePath) {
                 return;
             }
             
-            // Clear any existing chart
             chartContainer.innerHTML = '';
             
-            // Chart dimensions
             const margin = { top: 20, right: 30, bottom: 120, left: 80 };
             const barWidth = 40;
             const barGap = 10;
@@ -1061,15 +943,12 @@ function getFileTypeInfo(filePath) {
             const height = 450;
             const chartHeight = height - margin.top - margin.bottom;
             
-            // Calculate totals for percentages
             const totalDownloadSize = ownershipChartData.reduce((sum, d) => sum + d.totalDownloadSize, 0);
             const totalInstallSize = ownershipChartData.reduce((sum, d) => sum + d.totalInstallSize, 0);
             
-            // Create tooltip
             const tooltip = d3.select('body').append('div')
                 .attr('class', 'd3-tooltip');
             
-            // Create SVG
             const svg = d3.select('#ownershipChart')
                 .append('svg')
                 .attr('width', width)
@@ -1080,7 +959,6 @@ function getFileTypeInfo(filePath) {
             const g = svg.append('g')
                 .attr('transform', `translate(${margin.left},${margin.top})`);
             
-            // Scales
             const x = d3.scaleBand()
                 .domain(ownershipChartData.map(d => d.name))
                 .range([0, width - margin.left - margin.right])
@@ -1092,7 +970,6 @@ function getFileTypeInfo(filePath) {
                 .nice()
                 .range([chartHeight, 0]);
             
-            // Grid lines
             g.append('g')
                 .attr('class', 'grid')
                 .call(d3.axisLeft(y)
@@ -1100,7 +977,6 @@ function getFileTypeInfo(filePath) {
                     .tickFormat('')
                 );
             
-            // Y axis with formatted bytes
             const yAxis = g.append('g')
                 .attr('class', 'axis')
                 .call(d3.axisLeft(y)
@@ -1108,13 +984,11 @@ function getFileTypeInfo(filePath) {
                     .ticks(5)
                 );
             
-            // X axis
             const xAxis = g.append('g')
                 .attr('class', 'axis')
                 .attr('transform', `translate(0,${chartHeight})`)
                 .call(d3.axisBottom(x));
             
-            // Rotate x-axis labels for better readability with long text
             xAxis.selectAll('text')
                 .attr('transform', 'rotate(-55)')
                 .style('text-anchor', 'end')
@@ -1122,7 +996,6 @@ function getFileTypeInfo(filePath) {
                 .attr('dy', '0.5em')
                 .style('font-size', '11px');
             
-            // Create groups for each owner
             const ownerGroups = g.selectAll('.owner-group')
                 .data(ownershipChartData)
                 .enter()
@@ -1130,7 +1003,6 @@ function getFileTypeInfo(filePath) {
                 .attr('class', 'owner-group')
                 .attr('transform', d => `translate(${x(d.name)},0)`);
             
-            // Download size bars (blue)
             ownerGroups.append('rect')
                 .attr('class', 'bar download-bar')
                 .attr('x', 0)
@@ -1169,7 +1041,6 @@ function getFileTypeInfo(filePath) {
                 .attr('y', d => y(d.totalDownloadSize))
                 .attr('height', d => chartHeight - y(d.totalDownloadSize));
             
-            // Install size bars (green)
             ownerGroups.append('rect')
                 .attr('class', 'bar install-bar')
                 .attr('x', barWidth + barGap)
@@ -1209,11 +1080,9 @@ function getFileTypeInfo(filePath) {
                 .attr('y', d => y(d.totalInstallSize))
                 .attr('height', d => chartHeight - y(d.totalInstallSize));
             
-            // Legend
             const legend = svg.append('g')
                 .attr('transform', `translate(${width / 2 - 100},${height - 25})`);
             
-            // Download legend
             legend.append('rect')
                 .attr('x', 0)
                 .attr('y', 0)
@@ -1229,7 +1098,6 @@ function getFileTypeInfo(filePath) {
                 .style('fill', '#333')
                 .text('Download size');
             
-            // Install legend
             legend.append('rect')
                 .attr('x', 130)
                 .attr('y', 0)
@@ -1246,12 +1114,8 @@ function getFileTypeInfo(filePath) {
                 .text('Install size');
         }
         
-        // Open a team's detail section by name.
-        //
-        // The chart and the dropdown are built from different groupings now — primary
-        // owner versus every owner — so they do not share indices. Resolving by name is
-        // what keeps a click on a bar working: the bar's team is looked up in the list
-        // the dropdown was populated from, wherever that team happens to sit in it.
+        // By name, not by index: the chart and the dropdown are built from different
+        // groupings, so they do not share indices.
         function showOwnerDetails(ownerName) {
             const index = ownerGroupData.findIndex(owner => owner.name === ownerName);
             if (index === -1) return;
@@ -1270,13 +1134,11 @@ function getFileTypeInfo(filePath) {
             
             dropdown.innerHTML = '<option value="">Select an owner...</option>';
             
-            // Create array with owner and original index
             const ownerWithIndices = ownerGroupData.map((owner, index) => ({
                 owner: owner,
                 index: index
             }));
             
-            // Separate "others" from regular owners
             const othersEntries = ownerWithIndices.filter(item => 
                 item.owner.name.toLowerCase() === 'others' || 
                 item.owner.name.toLowerCase() === 'other'
@@ -1286,13 +1148,10 @@ function getFileTypeInfo(filePath) {
                 item.owner.name.toLowerCase() !== 'other'
             );
             
-            // Sort regular owners alphabetically
             regularEntries.sort((a, b) => a.owner.name.localeCompare(b.owner.name));
             
-            // Combine: regular owners first, then "others"
             const sortedEntries = [...regularEntries, ...othersEntries];
             
-            // Populate dropdown
             let appOwnerIndex = null;
             sortedEntries.forEach(item => {
                 const option = document.createElement('option');
@@ -1300,13 +1159,11 @@ function getFileTypeInfo(filePath) {
                 option.textContent = item.owner.name;
                 dropdown.appendChild(option);
                 
-                // Track "App" owner for auto-selection
-                if (item.owner.name === 'App') {
+                    if (item.owner.name === 'App') {
                     appOwnerIndex = item.index;
                 }
             });
             
-            // Auto-select "App" owner if it exists and autoSelectApp is true
             if (autoSelectApp && appOwnerIndex !== null) {
                 dropdown.value = appOwnerIndex;
                 renderOwnerDetails(appOwnerIndex);
@@ -1324,7 +1181,6 @@ function getFileTypeInfo(filePath) {
             const owner = ownerGroupData[ownerIndex];
             detailSection.style.display = 'block';
             
-            // Render summary
             const summaryDiv = document.getElementById('ownerDetailSummary');
             summaryDiv.innerHTML = `
                 <div style="text-align: center;">
@@ -1345,12 +1201,8 @@ function getFileTypeInfo(filePath) {
                 </div>
             `;
             
-            // Render modules
             const modulesGrid = document.getElementById('ownerModulesGrid');
-            // `owner.modules` is a list of modules, not a name-keyed map: a module can
-            // appear under several teams, and the array does not care that. It used to be
-            // a map, and reading it as one made every card below show its own index as the
-            // module name.
+            // A list, not a map: a module can appear under several teams.
             const modules = owner.modules
                 .slice()
                 .sort((a, b) => calculateModuleDownload(b) - calculateModuleDownload(a));
@@ -1365,9 +1217,7 @@ function getFileTypeInfo(filePath) {
                 const binaryPercent = maxModuleSize > 0 ? (module.binarySize || 0) / maxModuleSize * 100 : 0;
                 const imagePercent = maxModuleSize > 0 ? (module.imageFileSize || 0) / maxModuleSize * 100 : 0;
                 
-                // Resource breakdown by type. Named apart from the "Resources" list below,
-                // which is the resources themselves: the two are different things and one
-                // heading cannot carry both.
+                // Named "Resource Types" to keep it distinct from the "Resources" list below.
                 const resourcesHTML = Object.keys(module.resources || {}).length > 0 ? `
                     <h4 style="margin-top: 20px; margin-bottom: 15px; color: #333;">Resource Types</h4>
                     <div class="resources-grid">
@@ -1380,11 +1230,9 @@ function getFileTypeInfo(filePath) {
                         `).join('')}
                     </div>
                 ` : '';
-                
-                // The module's resources, and its asset catalog's contents
+
                 const topFilesHTML = renderModuleResources(module);
-                
-                // Source files from LinkMap
+
                 const sourceFiles = module.files || [];
                 const filesHTML = sourceFiles.length > 0 ? `
                     <div class="files-section">
@@ -1475,7 +1323,6 @@ function getFileTypeInfo(filePath) {
             ownerGroupData = prepareOwnerGroupData(currentOwnershipSort);
             renderOwnershipChart();
             populateOwnerDropdown();
-            // Reset detail view
             document.getElementById('ownerDropdown').value = '';
             document.getElementById('ownerDetailSection').style.display = 'none';
         });
@@ -1485,13 +1332,12 @@ function getFileTypeInfo(filePath) {
             renderModules(document.getElementById('searchInput').value, currentSort);
         });
 
-        // Owner badges are filters, on both the module card and the owner detail card.
-        // Delegated, because the cards are rebuilt on every render and a per-card
-        // handler would have to be reattached each time.
+        // Delegated: the cards are rebuilt on every render, so a per-card handler would
+        // have to be reattached each time.
         document.querySelector('.container').addEventListener('click', (e) => {
             const badge = e.target.closest('.owner-badge-filter');
             if (!badge) return;
-            // The card header also toggles, so the badge must not fall through to it.
+            // The card header also toggles.
             e.stopPropagation();
             selectTeamFilter(badge.dataset.owner);
         });
@@ -1505,19 +1351,14 @@ function getFileTypeInfo(filePath) {
         renderOwnershipChart();
         populateOwnerDropdown(true); // Auto-select "App" on initial page load
         
-        // Insights renders once, on first visit. Declared here because `switchTab` runs
-        // before the DOM-ready block below.
+        // Declared here because `switchTab` runs before the DOM-ready block below.
         let insightsRendered = false;
 
-        // Which of the two size figures the Insights page is showing. Download is
-        // compressed and is what the user fetches; install is uncompressed and is what
-        // the device stores. Defaults to install, which is what the page showed before
-        // the control existed.
+        // Compressed download or uncompressed install.
         let insightsSizeBasis = 'installSize';
 
-        // A module's size in whichever unit the page is currently showing. Every section
-        // that has both figures reads this rather than picking one, so the control cannot
-        // leave two charts disagreeing about what they are measuring.
+        // Read by every section that has both figures, so the control cannot leave two
+        // charts disagreeing about what they are measuring.
         function moduleSizeForInsights(module) {
             return insightsSizeBasis === 'downloadSize'
                 ? calculateModuleDownload(module)
@@ -1527,17 +1368,14 @@ function getFileTypeInfo(filePath) {
         function setInsightsSizeBasis(basis) {
             if (insightsSizeBasis === basis) return;
             insightsSizeBasis = basis;
-            // Before the first visit there is nothing on the page to redraw, and the
-            // render-once flag will pick the basis up when it does.
+            // Nothing on the page to redraw before the first visit; the render-once flag
+            // picks the basis up when it does.
             if (insightsRendered) renderInsights();
         }
 
-        // Insights Tab Functions
         function renderInsights() {
-            // Every chart appends its own tooltip to the body, and User Impact writes
-            // into a container it never cleared. Re-rendering therefore grew the DOM
-            // without bound, which is what the render-once guard was working around.
-            // The size control needs re-render, so clear both here.
+            // Each chart appends its own tooltip and User Impact writes into a
+            // container it never cleared, so re-rendering grows the DOM without bound.
             d3.select('body').selectAll('.d3-tooltip').remove();
             document.getElementById('userImpactSection').innerHTML = '';
 
@@ -1547,20 +1385,16 @@ function getFileTypeInfo(filePath) {
             renderUserImpact();
         }
 
-        // 1. Top Offenders Dashboard
         function renderTopOffenders() {
             const allModules = Object.values(data.modules);
 
-            // Apply insights filters
             const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
 
-            // Top 20 Modules by size
             const topModules = modules
                 .map(m => ({ name: m.name, size: moduleSizeForInsights(m), owner: m.owner }))
                 .sort((a, b) => b.size - a.size)
                 .slice(0, 20);
             
-            // Top 20 Source Files across all modules
             const allFiles = [];
             modules.forEach(module => {
                 if (module.files) {
@@ -1575,39 +1409,23 @@ function getFileTypeInfo(filePath) {
             });
             const topFiles = allFiles.sort((a, b) => b.size - a.size).slice(0, 20);
             
-            // Top 20 resources across all modules (excluding frameworks)
-            //
-            // Everything in the bundle that is not compiled code is a resource, not just
-            // images. Directory entries are excluded: the archive lists them at 0 B.
-            //
-            // A compiled asset catalog is the one resource with two honest
-            // representations, and which one is correct depends on the unit in view.
-            // Download: the `.car` is one file in the archive, and its contents are not in
-            // the download at all, so the container is the figure. Install: the container
-            // says nothing about what it costs, and the renditions are the expanded bytes,
-            // so the contents are the figure. Listing both would count the same bytes
-            // twice in one chart, which is what this avoids.
-            //
-            // Neither is a list of files, and the compressed case used to be a plain
-            // container row: `Payload/…/ProfisBus.bundle/Assets.car` at 58.6 KB says a
-            // catalog exists and what it cost, which is nothing anyone can act on. So
-            // compressed, it is one row per catalog carrying the asset count — 12 assets
-            // for 58.6 KB is a catalog worth opening, 400 for the same is not. Uncompressed,
-            // the renditions are listed individually, because that is where the actionable
-            // names are.
-            //
-            // Non-catalog resources have only a compressed per-file figure — `top` records
-            // compressed sizes, and the sole uncompressed per-file numbers in the model
-            // are catalog renditions and images. So the toggle moves the catalog and
-            // leaves the rest of the list as it is.
+            // A catalog is the one resource with two honest representations, and which is
+            // correct depends on the unit: the `.car` is one archive file and its
+            // contents are not in the download, while the renditions are the installed
+            // bytes and the container says nothing about them. So compressed, one row
+            // per catalog carrying the asset count, since a bare path at 58.6 KB is not
+            // actionable; uncompressed, the renditions individually. Listing both would
+            // count the same bytes twice. The rest of the list has only a compressed
+            // per-file figure, so the toggle moves the catalog alone.
             const allResources = [];
             const byDownload = insightsSizeBasis === 'downloadSize';
             modules.forEach(module => {
-                // Exclude external modules (frameworks) from resource files
+                // A framework's resources belong to its own module, not the app's list.
                 if (module.internal !== true) return;
 
                 if (module.top) {
                     Object.entries(module.top).forEach(([path, size]) => {
+                        // The archive lists directory entries at 0 B.
                         if (path.endsWith('/')) return;
                         if (!path.toLowerCase().endsWith('.car')) {
                             allResources.push({
@@ -1642,13 +1460,10 @@ function getFileTypeInfo(filePath) {
             });
             const topResources = allResources.sort((a, b) => b.size - a.size).slice(0, 20);
             
-            // Render Top Modules Bar Chart
             renderHorizontalBarChart('topModulesChart', topModules, 'size', 'name', '#063773');
             
-            // Render Top Files Bar Chart
             renderHorizontalBarChart('topFilesChart', topFiles, 'size', 'name', '#e74c3c');
             
-            // Render Top Resources Bar Chart
             renderHorizontalBarChart('topResourcesChart', topResources, 'size', 'name', '#3498db');
         }
         
@@ -1661,7 +1476,6 @@ function getFileTypeInfo(filePath) {
                 return;
             }
             
-            // Get container width and make chart responsive
             const containerWidth = container.offsetWidth || 400;
             const margin = { top: 10, right: 60, bottom: 30, left: 140 };
             const width = Math.max(containerWidth, 300);
@@ -1686,11 +1500,9 @@ function getFileTypeInfo(filePath) {
                 .range([0, height - margin.top - margin.bottom])
                 .padding(0.2);
             
-            // Create tooltip
             const tooltip = d3.select('body').append('div')
                 .attr('class', 'd3-tooltip');
             
-            // Bars
             g.selectAll('.bar')
                 .data(data)
                 .enter()
@@ -1715,8 +1527,8 @@ function getFileTypeInfo(filePath) {
                         tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">In compiled asset catalog, uncompressed</div>`;
                     }
                     if (d.catalog) {
-                        // The label says this is a container, so the count is what makes
-                        // the row worth reading, and the path is where to go looking.
+                        // The label names a container, so the count is what makes the row worth
+                        // reading and the path is where to go looking.
                         tooltipContent += `<div style="margin-top: 5px; color: #ffd700;">Compiled asset catalog, ${d.assets} asset${d.assets === 1 ? '' : 's'}, compressed</div>`;
                         if (d.path) {
                             tooltipContent += `<div style="margin-top: 5px; color: #999; word-break: break-all;">${escapeHtml(d.path)}</div>`;
@@ -1735,7 +1547,6 @@ function getFileTypeInfo(filePath) {
                 .duration(800)
                 .attr('width', d => x(d[sizeKey]));
             
-            // Labels (names)
             g.selectAll('.label')
                 .data(data)
                 .enter()
@@ -1753,12 +1564,9 @@ function getFileTypeInfo(filePath) {
                     return name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
                 })
                 .append('title')
-                // A catalog row is labelled as a container, so its native tooltip shows
-                // the path it was collapsed from — otherwise the label reads as a name
-                // that does not exist anywhere in the bundle.
+                // The path a catalog row was collapsed from; the label is not a real filename.
                 .text(d => d.path || d[nameKey]);
             
-            // Size labels
             g.selectAll('.size-label')
                 .data(data)
                 .enter()
@@ -1774,25 +1582,16 @@ function getFileTypeInfo(filePath) {
                 .text(d => formatBytes(d[sizeKey]));
         }
         
-        // 2. Treemap Visualization
         function renderTreemap() {
             const container = document.getElementById('treemapChart');
             container.innerHTML = '';
             
             const allModules = Object.values(data.modules);
             
-            // Apply insights filters
             const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
             
-            // Prepare hierarchical data
-            //
-            // The cell value follows the size control, and the tooltip's binary and
-            // asset figures follow it too. They used to be pinned to the uncompressed
-            // pair, which is only correct while the cell is uncompressed: showing a
-            // compressed cell total above an uncompressed breakdown is the same unit
-            // mismatch the module card had. Both pairs exist — `binarySize` is LinkMap
-            // output and `binaryCompressedSize` the archive listing, `imageFileSize` is
-            // uncompressed and `imageSize` compressed.
+            // The tooltip's binary and asset figures follow the cell's unit, or a
+            // compressed total sits above an uncompressed breakdown.
             const byDownload = insightsSizeBasis === 'downloadSize';
             const treemapData = {
                 name: 'App',
@@ -1805,12 +1604,10 @@ function getFileTypeInfo(filePath) {
                 }))
             };
 
-            // Percentages are relative to what the treemap actually draws. Dividing a
-            // module's size by the whole-app total understated every cell whenever the
-            // insights filters hide modules.
+            // Relative to what the treemap draws, not the whole-app total: the insights
+            // filters can hide modules.
             const treemapTotal = d3.sum(treemapData.children, d => d.value);
             
-            // Use container's full width for better fit
             const containerWidth = container.offsetWidth || 1340;
             const width = containerWidth;
             const height = 600;
@@ -1883,7 +1680,6 @@ function getFileTypeInfo(filePath) {
                     return t => i(t);
                 });
             
-            // Add text labels for larger rectangles
             leaf.append('text')
                 .attr('x', 4)
                 .attr('y', 16)
@@ -1916,19 +1712,15 @@ function getFileTypeInfo(filePath) {
                 .style('pointer-events', 'none');
         }
         
-        // 3. Resource Type Breakdown
         function renderResourceBreakdown() {
             const allModules = Object.values(data.modules);
             
-            // Apply insights filters
             const modules = allModules.filter(m => moduleMatchesInsightsFilters(m));
             
-            // Aggregate all resources
             const resourceStats = {};
 
-            // Every category below is a compressed size, because `resources` and
-            // `binaryCompressedSize` both record compressed sizes. The "Other" residual
-            // is measured against a compressed total to match — see below.
+            // Every category here is compressed: `resources` and `binaryCompressedSize`
+            // both record compressed sizes, and the residual is measured to match.
             let totalBinarySize = 0;
             let binaryModuleCount = 0;
             modules.forEach(m => {
@@ -1942,16 +1734,10 @@ function getFileTypeInfo(filePath) {
                 resourceStats['Binary'] = { size: totalBinarySize, count: binaryModuleCount };
             }
 
-            // Add every resource by type: images, fonts, plists, PDFs and the rest.
-            //
-            // There is no separate "Images" rollup, and there could not be a correct
-            // one. `imageSize` is accumulated from the same files that also populate
-            // `resources['png']`, `resources['jpg']` and so on, at the same compressed
-            // size — so an Images category summed the same bytes a second time and
-            // inflated the donut's total past the app's real size. Its count was worse:
-            // it counted every key in `top`, which is every file in the bundle whatever
-            // its type. The per-type breakdown already separates the image formats, and
-            // it carries the counts those formats actually have.
+            // No "Images" rollup: `imageSize` accumulates the same files that populate
+            // `resources['png']` and friends, at the same compressed size, so such a
+            // category would double-count them and push the total past the app's real
+            // size. The per-type entries already separate the formats, with real counts.
             modules.forEach(module => {
                 Object.entries(module.resources || {}).forEach(([type, res]) => {
                     if (!resourceStats[type]) {
@@ -1968,24 +1754,16 @@ function getFileTypeInfo(filePath) {
                 count: stats.count
             }));
 
-            // The total the residual is measured against has to be in the same unit as
-            // the categories, which are all compressed. This used to be
-            // `calculateModuleTotal` — uncompressed install size — so "Other" absorbed
-            // the app's entire compression delta rather than the files no category
-            // claimed, and on a typical app that was the largest wedge in the chart.
-            //
-            // A statically linked module is excluded: it has no compressed size of its
-            // own, because the linker put its code inside the app binary, which is
-            // already counted once under Binary. Its `downloadSize` is the uncompressed
-            // LinkMap fallback, so including it would add its entire code size to the
-            // residual.
+            // Must not be `calculateModuleTotal`: the categories are compressed, so an
+            // uncompressed total makes "Other" absorb the app's whole compression delta
+            // instead of the files no category claimed. Statically linked modules are
+            // excluded for the same reason — their code is inside the app binary, already
+            // counted under Binary.
             const compressedModules = modules.filter(m => m.staticallyLinked !== true);
             const calculatedTotal = compressedModules.reduce((sum, m) => sum + calculateModuleDownload(m), 0);
             const resourceTotal = resourceData.reduce((sum, r) => sum + r.size, 0);
 
-            // Anything not covered by a named category above lands in "Other": the
-            // `.car` files and the untyped remainder, neither of which `resources`
-            // records.
+            // The `.car` files and the untyped remainder, neither of which `resources` records.
             if (calculatedTotal > resourceTotal) {
                 const otherSize = calculatedTotal - resourceTotal;
                 if (otherSize > 0) {
@@ -1997,21 +1775,16 @@ function getFileTypeInfo(filePath) {
                 }
             }
             
-            // Sort by size descending
             resourceData.sort((a, b) => b.size - a.size);
             
-            // Create shared color scale
             const resourceColorScale = d3.scaleOrdinal()
                 .domain(resourceData.map(d => d.type))
                 .range(d3.schemeSet3);
             
-            // Render Count Donut Chart (without legend)
             renderDonutChart('resourceCountChart', resourceData, 'count', 'type', 'files', resourceColorScale, false);
             
-            // Render Size Donut Chart (without legend)
             renderDonutChart('resourceSizeChart', resourceData, 'size', 'type', 'bytes', resourceColorScale, false);
             
-            // Render shared legend below both charts
             renderResourceLegend(resourceData, resourceColorScale);
         }
         
@@ -2024,7 +1797,6 @@ function getFileTypeInfo(filePath) {
                 return;
             }
             
-            // Create wrapper - simple div for chart only
             const wrapper = d3.select('#' + containerId)
                 .append('div')
                 .style('display', 'flex')
@@ -2043,7 +1815,6 @@ function getFileTypeInfo(filePath) {
             const g = svg.append('g')
                 .attr('transform', `translate(${chartWidth / 2},${chartHeight / 2})`);
             
-            // Use provided color scale or create default
             const color = colorScale || d3.scaleOrdinal()
                 .domain(data.map(d => d[labelKey]))
                 .range(d3.schemeSet3);
@@ -2109,7 +1880,6 @@ function getFileTypeInfo(filePath) {
                     return t => arc(i(t));
                 });
             
-            // Center text
             g.append('text')
                 .attr('text-anchor', 'middle')
                 .attr('dy', '-0.5em')
@@ -2130,7 +1900,6 @@ function getFileTypeInfo(filePath) {
             const legendContainer = document.getElementById('resourceLegend');
             legendContainer.innerHTML = '';
             
-            // Sort data by size descending for legend
             const sortedData = [...resourceData].sort((a, b) => b.size - a.size);
             
             sortedData.forEach(d => {
@@ -2164,13 +1933,11 @@ function getFileTypeInfo(filePath) {
             });
         }
         
-        // 4. User Impact Score
         function renderUserImpact() {
             const container = document.getElementById('userImpactSection');
             const downloadSize = data.totalPackageSize || 0;
             const installSize = data.totalInstallSize || 0;
             
-            // Network speeds in Mbps
             const networks = [
                 { name: 'WiFi', speed: 100, icon: '📶', color: '#2ecc71' },
                 { name: '5G', speed: 50, icon: '📱', color: '#3498db' },
@@ -2178,7 +1945,6 @@ function getFileTypeInfo(filePath) {
                 { name: '3G', speed: 1, icon: '📱', color: '#e74c3c' }
             ];
             
-            // Calculate download times (in seconds)
             const downloadSizeMB = downloadSize / (1024 * 1024);
             const downloadTimes = networks.map(net => ({
                 ...net,
@@ -2186,7 +1952,6 @@ function getFileTypeInfo(filePath) {
                 size: downloadSize
             }));
             
-            // iPhone storage comparison (using 64GB as baseline)
             const iPhone64GB = 64 * 1024 * 1024 * 1024;
             const iPhone128GB = 128 * 1024 * 1024 * 1024;
             const iPhone256GB = 256 * 1024 * 1024 * 1024;

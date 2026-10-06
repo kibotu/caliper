@@ -1,14 +1,8 @@
 import Foundation
 
-/// Service to manage package version information from Package.resolved
 public struct VersionService {
 
-    /// Assign versions to modules based on package resolved data.
-    ///
-    /// Matching runs in a fixed order and the candidate list is sorted, so the same
-    /// inputs always produce the same assignment. Iterating a `Dictionary` directly
-    /// would give a different answer on each run whenever a module name matches more
-    /// than one package identity.
+    /// Deterministic: a module matching several identities always resolves the same way.
     public func assignVersions(
         to modules: [String: ModuleSize],
         using versionMapping: [String: String],
@@ -27,12 +21,8 @@ public struct VersionService {
         }
     }
 
-    /// Resolves the version for one module name, strongest match first.
-    ///
-    /// Order: an explicit mapping, an exact match, a case-insensitive match, then a
-    /// prefix match in either direction. The last step is the fuzzy one, so it is
-    /// only reached when nothing exact matched, and it prefers the longest candidate
-    /// to avoid a short identity shadowing a longer, more specific one.
+    /// Strongest match first: explicit mapping, exact, case-insensitive, then longest
+    /// substring match in either direction.
     func resolveVersion(
         for moduleName: String,
         versionMapping: [String: String],
@@ -53,8 +43,6 @@ public struct VersionService {
             return versionMapping[identity]
         }
 
-        // Longest identity first, so `firebaseiossdk` beats a shorter `firebase`.
-        // Deterministic because `identities` is sorted and ties cannot occur.
         let partial = identities
             .filter { lowered.contains($0.lowercased()) || $0.lowercased().contains(lowered) }
             .sorted { $0.count > $1.count }

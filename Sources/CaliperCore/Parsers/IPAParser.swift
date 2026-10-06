@@ -1,12 +1,10 @@
 import Foundation
 
-/// Parser for IPA files to extract module information
 public struct IPAParser {
     private let assetCatalogParser = AssetCatalogParser()
 
     public init() {}
 
-    /// Generate a report of IPA contents
     public func generateReport(ipaPath: String) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
@@ -15,21 +13,20 @@ public struct IPAParser {
         let pipe = Pipe()
         process.standardOutput = pipe
         
-        // Accumulate output data asynchronously to prevent buffer blocking
-        // Using nonisolated(unsafe) for Swift 6 concurrency: handlers are cleaned up before data access
+        // Drained by the handler rather than readDataToEndOfFile, which would block.
+        // unsafe because the handler is detached below, before the data is read.
         nonisolated(unsafe) var outputData = Data()
-        
+
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let availableData = handle.availableData
             if !availableData.isEmpty {
                 outputData.append(availableData)
             }
         }
-        
+
         try process.run()
         process.waitUntilExit()
-        
-        // Clean up handler
+
         pipe.fileHandleForReading.readabilityHandler = nil
         
         let output = String(data: outputData, encoding: .utf8)
@@ -38,7 +35,6 @@ public struct IPAParser {
         return parseUnzipOutput(output)
     }
     
-    /// Build a comprehensive app size report from IPA contents
     public func buildAppSizeReport(
         report: String,
         unzippedPath: String
@@ -55,7 +51,6 @@ public struct IPAParser {
         for line in lines {
             processedLines += 1
 
-            // Print progress every 10%
             let progress = totalLines > 0 ? (processedLines * 100) / totalLines : 100
             if progress >= lastProgressUpdate + 10 {
                 lastProgressUpdate = progress
@@ -69,21 +64,17 @@ public struct IPAParser {
             )
         }
         
-        // Finalize top files for each module
         for (_, moduleSize) in result {
             moduleSize.finalizeTop()
         }
-        
+
         return result
     }
-    
-    // MARK: - Private Methods
-    
+
     private func parseUnzipOutput(_ output: String) -> String {
         let lines = output.components(separatedBy: .newlines)
         var report: [String] = []
-        
-        // Skip header (first 3 lines) and footer (last 2 lines)
+
         let dataLines = lines.dropFirst(3).dropLast(2)
         
         for line in dataLines {
@@ -113,20 +104,17 @@ public struct IPAParser {
         }
         
         let filePath = String(parts[2])
-        
-        // Extract module name from path
+
         guard let moduleName = extractModuleName(from: filePath) else {
             return
         }
-        
-        // Initialize module if needed
+
         if result[moduleName] == nil {
             result[moduleName] = ModuleSize(name: moduleName)
         }
-        
+
         guard let moduleSize = result[moduleName] else { return }
-        
-        // Categorize and process file
+
         try categorizeFile(
             filePath: filePath,
             unzippedPath: unzippedPath,
@@ -136,7 +124,6 @@ public struct IPAParser {
             containerName: extractContainerName(from: filePath)
         )
         
-        // Update total uncompressed size
         moduleSize.proguard += uncompressedSize
     }
     
@@ -227,22 +214,12 @@ public struct IPAParser {
         guard let ext = components.last else { return }
         let fileExtension = String(ext).lowercased()
 
-        // Is this file the container's own executable?
-        //
-        // Checked before the extension switch below, because a framework binary is
-        // named after the framework and can legitimately end in an extension that
-        // switch treats as a resource: `Data.framework/Data.json` is a 90 KB binary,
-        // not a JSON payload. Classifying it by extension filed it as a resource, so
-        // the framework's Binary Size read 0 B.
-        //
-        // The test is on the filename with its extension removed, not the whole path.
-        // A bare `hasSuffix(containerName)` cannot match a binary that carries an
-        // extension — `"Data.json".hasSuffix("Data")` is false — which is precisely the
-        // case that went wrong.
-        //
-        // Trailing slashes are excluded because the archive lists the container's own
-        // directory too, and `Data.framework/` has a stem of `Data` as well: same test,
-        // 0 bytes. It is a directory, not a binary, and recording it would overwrite the
+        // Checked before the extension switch, because a framework binary is named after
+        // the framework and can end in an extension that switch reads as a resource:
+        // `Data.framework/Data.json` is a binary, not a JSON payload. The test is on
+        // the stem, not the full name, because `"Data.json".hasSuffix("Data")` is false.
+        // Trailing slashes are excluded: the archive also lists `Data.framework/`,
+        // whose stem is also `Data`, and recording that 0 B entry would overwrite the
         // real figure whenever the archive happens to list it last.
         let fileName = (filePath as NSString).lastPathComponent
         let stem = (fileName as NSString).deletingPathExtension
@@ -254,12 +231,9 @@ public struct IPAParser {
 
         if isMainBinary {
             moduleSize.binarySize = compressedSize
-            // `binarySize` gets overwritten with uncompressed LinkMap output later,
-            // so keep the compressed figure separately for the download-size total.
             moduleSize.binaryCompressedSize = compressedSize
-            // Breadcrumb: Log main binary detection
             fputs("  [Binary] Detected main binary: \(containerName ?? "unknown") (\(compressedSize) bytes)\n", stderr)
-            // Don't add the main binary to top files - it's already analyzed via linkmap
+            // Counted separately, so it must not also appear as a bundled file.
             return
         }
 
@@ -280,18 +254,12 @@ public struct IPAParser {
             moduleSize.addToTop(file: filePath, size: compressedSize)
             
         case "car":
-            // The .car is a file in the IPA, so it counts towards the download exactly
-            // like any other: at its compressed size from the archive listing. Without
-            // this the catalog was absent from the download total entirely, and
-            // `assetutil`'s per-asset figures were standing in for it — those are
-            // uncompressed, which overstated the download of compressible catalogs.
+            // A real file in the archive, so it counts towards the download at its
+            // compressed size. `assetutil`'s per-asset figures cannot stand in: they
+            // describe the catalog expanded.
             moduleSize.addToTop(file: filePath, size: compressedSize)
 
-            // assetutil breaks the catalog's contents down per asset. Those figures are
-            // uncompressed and describe the installed size, so they are recorded as
-            // image detail rather than added to the compressed dictionaries.
             let fullPath = "\(unzippedPath)/\(filePath)"
-            // Breadcrumb: Log .car file processing
             fputs("  [Asset Catalog] Processing: \(filePath)\n", stderr)
             do {
                 try assetCatalogParser.parse(filePath: fullPath, moduleSize: moduleSize)
@@ -300,8 +268,6 @@ public struct IPAParser {
             }
             
         default:
-            // Not the container's own executable, and no rule above claimed it, so it
-            // is an ordinary bundled resource.
             moduleSize.addToTop(file: filePath, size: compressedSize)
         }
     }

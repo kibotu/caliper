@@ -1,10 +1,9 @@
 import Foundation
 
-/// Represents a module ownership entry from the YAML configuration
 public struct OwnershipEntry: Codable {
-    /// A single owner. Kept for decoding the common `owner: team` form.
+    /// A single owner, as written `owner: team`.
     public let owner: String?
-    /// Several owners, as written `owners: [a, b]`. Kept for the list form.
+    /// Several owners, as written `owners: [a, b]`.
     public let owners: [String]?
     public let identifier: String
     public let `internal`: Bool?
@@ -20,10 +19,7 @@ public struct OwnershipEntry: Codable {
         self.internal = internalFlag
     }
 
-    /// All owners for this entry, primary first.
-    ///
-    /// `owners:` wins when both keys are present. An entry with neither yields an
-    /// empty list, which callers treat as "matched but unowned".
+    /// `owners:` wins over `owner:`; neither yields empty, meaning "matched but unowned".
     public var allOwners: [String] {
         if let owners, !owners.isEmpty {
             return owners
@@ -34,12 +30,8 @@ public struct OwnershipEntry: Codable {
         return []
     }
 
-    /// Matches a module name against `identifier`, honouring `*` and `?`.
-    ///
-    /// Everything that is not a wildcard is escaped before it reaches the regex, so a
-    /// dotted module name like `Foundation.tbd` matches only itself. Without that,
-    /// `Foundation.tbd` would also match `FoundationXtbd`, because `.` is a regex
-    /// metacharacter.
+    /// Matches a module name against `identifier`, honouring `*` and `?`. Everything
+    /// else is escaped, so `Foundation.tbd` does not also match `FoundationXtbd`.
     public func matches(_ moduleName: String) -> Bool {
         let pattern = Self.globToRegex(identifier)
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
@@ -49,8 +41,7 @@ public struct OwnershipEntry: Codable {
         return regex.firstMatch(in: moduleName, options: [], range: range) != nil
     }
 
-    /// Escapes the identifier, then translates `*` and `?` into their regex
-    /// equivalents. Anchored at both ends so the whole name must match.
+    /// Anchored at both ends, so the whole name must match.
     static func globToRegex(_ glob: String) -> String {
         var out = "^"
         for character in glob {
