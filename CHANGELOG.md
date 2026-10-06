@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.5.3] - 2026-10-06
+
+### Changed
+
+- **Comments cut from 978 lines to 264.** No behaviour change and no output change: the
+  JSON and HTML reports are byte-for-byte identical, comments in the emitted HTML aside.
+  What went:
+  - Comments restating the signature. `/// Add a resource to this module`, `// Parse hex
+    size`, `// Center text`, and about forty more that named the line beneath them.
+  - Comments narrating a bug that had already been fixed — which formula used to
+    double-count images, why the d3 lookup once missed Mint installs, what a regression's
+    reproduction looked like. That belongs in the commit that fixed it and the changelog
+    entry it shipped in, both of which still exist. In the source it was a second copy of
+    the git log, and it went stale: several such comments described behaviour that had
+    since changed again.
+  - Test comments restating the `@Test` name.
+- Three `if` blocks collapsed into early returns while the comments around them were
+  removed. No behaviour change, but the release is not comment-only in the diff.
+
+What stayed is the part a reader cannot recover from the code: the compressed/uncompressed
+unit split, which is the difference between a right number and a silently wrong one, and
+`Bundle.module` being tried last because it traps when the bundle is missing.
+
 ## [1.5.2] - 2026-10-06
 
 ### Fixed
