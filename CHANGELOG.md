@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-05
+
+### Added
+
+- **A module can be owned by more than one team, and the report now shows it.** The
+  `owners: [a, b]` form of an ownership entry was parsed and encoded to JSON from 1.3.0,
+  but nothing in the report read it: a module owned by `app` and `core` showed one badge
+  and `core` was invisible. Every owner is now badged, co-owners in a lighter gradient so
+  the order reads without a second label saying "also".
+- **A team filter on the Breakdown tab.** An `All teams` dropdown beside the search box,
+  populated from the owners actually present, so a team that owns nothing cannot be
+  selected and a team that only ever co-owns something still can. Every owner badge is
+  also clickable and filters to the same value; the two are driven by one variable, so
+  they cannot disagree. Clicking the selected team again clears the filter, and the
+  matching badge is outlined so the active filter is visible on the cards.
+  - Filtering matches on **any** owner, not just the primary. Matching on the primary
+    alone would hide a shared module from every team except the first one listed, which
+    is the opposite of what someone filtering by team is asking.
+- **The Ownership tab handles many teams.** A shared module is now attributed to every
+  team that owns it, so a team that only co-owns still appears in the per-team list with
+  a real figure. Each team's dropdown option carries its total, and its detail card badges
+  the module's owners so a reader inside one team can see the module is shared.
+
+### Changed
+
+- **The Ownership tab's chart and its per-team list are now built differently, on
+  purpose.** The chart counts each module once under its primary owner, so the teams
+  partition the app and the bars add up to it. The list counts a shared module in full
+  for every team that owns it, so its totals deliberately exceed the app. There is no
+  honest way to split a framework's bytes between two teams, so the list over-counts
+  rather than inventing a share; the tab says so. Collapsing the two into one grouping
+  would mean either the chart double-counts or the list under-reports a team.
+- A click on a bar in the Ownership chart resolves its team **by name** rather than by
+  array index, since the chart and the dropdown are built from different groupings now
+  and no longer share indices.
+
+### Fixed
+
+- **The owner detail cards showed each module's array index as its name.** Splitting the
+  ownership grouping turned `owner.modules` from a name-keyed map into a list, because a
+  module can appear under several teams. The detail card still read it with
+  `Object.entries`, so every card in that section rendered `0`, `1`, `2` where a module
+  name should have been. Found in a browser, not by the grouping tests — those check the
+  totals, not the markup.
+- Badges on the Ownership tab's module cards are informational rather than clickable. The
+  team filter does not apply on that tab, so a badge that looked clickable there would do
+  nothing when clicked.
+
+### Known issues
+
+- The app module is auto-tagged with the owner `App` (see `tagAppModule`). An ownership
+  file that writes `owners: [app, core]` therefore produces two teams differing only in
+  case, and the team filter offers both. Reconciling them is a question about how the
+  auto-tag interacts with a hand-written file rather than a defect in the filter, so it is
+  left alone here; writing `App` in the file makes them one team.
+
 ## [1.4.1] - 2026-10-05
 
 ### Fixed
