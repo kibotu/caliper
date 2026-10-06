@@ -93,6 +93,46 @@ jobs:
           }
           echo "Packaged artifact verified: $(ls -la out/report.html)"
 
+      # The other shape the resource bundle reaches a user in. A `swift build` leaves d3 in
+      # the bundle's root; `mint install` produces a real Apple bundle with it under
+      # `Contents/Resources`. Nothing above can produce that — a Mint build is the only
+      # thing that does — so the layout is assembled here by hand.
+      #
+      # This step exists because the verification above could only ever see the layout its
+      # own build produced. 1.5.1 looked d3 up by appending its file name to the bundle's
+      # directory, which finds the root layout and misses the Apple one, so every Mint
+      # install wrote its JSON report and then failed the HTML one with `invalidOutput`
+      # while this workflow passed. A check that runs one layout cannot see a bug in the
+      # other.
+      - name: Verify the Mint bundle layout can generate a report
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          bundle="$workdir/caliper_CaliperCore.bundle"
+          mkdir -p "$bundle/Contents/Resources"
+          cp .build/release/caliper_CaliperCore.bundle/d3.v7.min.js "$bundle/Contents/Resources/"
+          cp .build/release/caliper_CaliperCore.bundle/LICENSE-d3.txt "$bundle/Contents/Resources/"
+          printf '<?xml version="1.0"?><plist version="1.0"><dict/></plist>' \
+            > "$bundle/Contents/Info.plist"
+          cp .build/release/caliper "$workdir/"
+
+          cd "$workdir"
+          mkdir -p Payload/App.app
+          head -c 4096 /dev/urandom > Payload/App.app/App
+          cp Payload/App.app/App Payload/App.app/Info.plist
+          (cd . && zip -qr app.ipa Payload)
+
+          ./caliper --ipa-path app.ipa --output-dir out
+          test -s out/report.html || {
+            echo "::error::no HTML report from the Mint bundle layout"
+            exit 1
+          }
+          grep -q "d3.v7" out/report.html || {
+            echo "::error::the HTML report has no d3 inlined from Contents/Resources"
+            exit 1
+          }
+          echo "Mint bundle layout verified: $(ls -la out/report.html)"
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
