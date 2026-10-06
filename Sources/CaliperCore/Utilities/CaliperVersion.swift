@@ -9,5 +9,5 @@ public enum CaliperVersion {
     ///
     /// 1.3.3 shipped with this still reading 1.3.2, so the constant drifted from the tag
     /// it exists to track. It moves with the release that follows, not backfilled.
-    public static let current = "1.5.1"
+    public static let current = "1.5.2"
 }
