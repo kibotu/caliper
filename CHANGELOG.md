@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-06
+
+### Fixed
+
+- **Every release since 1.3.3 shipped a binary that could not write an HTML report.**
+  The resource bundle — the HTML template and the vendored d3 — was added to the release
+  workflow's file list, but a release asset cannot be a directory, so it was silently
+  skipped and the executable uploaded alone. Downloaded 1.3.3, 1.4.0 and 1.5.0 and ran
+  them against a real archive:
+
+  ```
+  ✅ Report saved to: out/report.json
+  📊 Generating HTML report...
+  CaliperCore/resource_bundle_accessor.swift:12: Fatal error: could not load resource bundle
+  ```
+
+  The JSON report was written; the HTML report killed the process. `--version` and
+  `--help` worked, which is why it went unnoticed: neither touches the reporter.
+
+  The bundle is now packaged as `caliper_CaliperCore.bundle.tar.gz` and uploaded beside
+  the executable, with instructions in the release notes. It has to be extracted into the
+  same directory as the binary, because that is where it is looked up.
+- **The release workflow could not fail on a missing bundle.** The verification step
+  printed "Build completed successfully!" whatever happened. It now asserts the bundle was
+  built, asserts the archive is non-empty, and then runs the packaged artifact exactly as
+  a user would: it must produce a JSON report without the bundle, must fail without one,
+  and must write an HTML report with d3 inlined once the bundle is extracted. This is the
+  check whose absence let the original fix through.
+- **The bundle is now found beside the executable.** SwiftPM bakes the bundle's absolute
+  path into the binary at build time, so a release binary searched only its build machine
+  and the downloaded copy was never considered. The documented layout — the bundle in the
+  same directory as the executable — is searched first, with SwiftPM's lookup kept as a
+  fallback so every build and test environment resolves as before.
+
+### Known issues
+
+- **A missing resource bundle still aborts the process rather than raising an error.**
+  `Bundle.module` is SwiftPM's generated accessor and it ends in `fatalError`, which cannot
+  be caught, and its message leaks the build machine's path. Replacing it means
+  reimplementing SwiftPM's per-build-system resolution — under `swift test` the bundle is
+  found via a path baked in at compile time, nowhere near the executable — so the fix is
+  to make sure the bundle is actually shipped rather than to catch this. Not worth
+  reimplementing a build system's internals to improve one error message.
+- **`mint install kibotu/caliper` still cannot generate an HTML report.** Mint installs
+  from release assets and has no way to unpack a side-car archive next to the executable,
+  so the bundle is missing after a Mint install. Manual extraction works and the README says
+  so. Removing the dependency entirely means embedding the template and d3 in the binary at
+  compile time, which needs a generated Swift source and a build plugin; worth doing, but
+  not in a patch.
+
 ## [1.5.0] - 2026-10-05
 
 ### Added

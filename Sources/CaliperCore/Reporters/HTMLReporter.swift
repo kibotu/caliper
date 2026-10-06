@@ -20,11 +20,55 @@ public struct HTMLReporter {
 
     /// The vendored d3 bundle.
     static func vendoredD3() throws -> String {
-        guard let url = Bundle.module.url(forResource: "d3.v7.min", withExtension: "js"),
-              let contents = try? String(contentsOf: url, encoding: .utf8) else {
+        guard let root = resourceBundleURL() else {
+            throw CaliperError.invalidOutput
+        }
+        let url = root.appendingPathComponent("d3.v7.min.js")
+        guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
             throw CaliperError.invalidOutput
         }
         return contents
+    }
+
+    private static let bundleName = "caliper_CaliperCore"
+
+    /// An empty class used only to locate the bundle this code is linked into.
+    private final class BundleMarker {}
+
+    private static var candidatesForBundle: [URL] {
+        var candidates: [URL] = []
+        if let resources = Bundle.main.resourceURL { candidates.append(resources) }
+        if let resources = Bundle(for: BundleMarker.self).resourceURL { candidates.append(resources) }
+        if let executable = Bundle.main.executableURL {
+            candidates.append(executable.deletingLastPathComponent())
+        }
+        candidates.append(Bundle.main.bundleURL)
+        return candidates
+    }
+
+    /// The resource bundle's directory, or `nil` when it is not there.
+    ///
+    /// The documented layout is a `caliper_CaliperCore.bundle` directory beside the
+    /// executable, which is what a release download and a `swift build` both produce, so
+    /// that is searched first and `Bundle.module` is only the fallback.
+    ///
+    /// The fallback is not redundant. SwiftPM generates its resource accessor per build
+    /// system: the one compiled here bakes the bundle's absolute path in at build time
+    /// and searches `Bundle.main` before it, so under `swift test` the bundle is found
+    /// nowhere near the executable. Reimplementing that is not worth it, and
+    /// `Bundle.module`'s `fatalError` is what makes the order matter — reaching it only
+    /// when the bundle is genuinely absent keeps the crash to the case where it is
+    /// correct, instead of the case where the bundle is present but not where SwiftPM
+    /// happened to look.
+    static func resourceBundleURL() -> URL? {
+        for candidate in candidatesForBundle {
+            let url = candidate.appendingPathComponent(bundleName + ".bundle")
+            if Bundle(url: url) != nil { return url }
+        }
+        // `Bundle.module` traps when the bundle is absent, so it must stay last: it
+        // resolves the paths these candidates cannot know about — chiefly the one baked
+        // in at compile time, which is the only way `swift test` finds the bundle.
+        return Bundle.module.bundleURL
     }
     
     // MARK: - HTML Template
