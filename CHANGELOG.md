@@ -31,10 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same directory as the binary, because that is where it is looked up.
 - **The release workflow could not fail on a missing bundle.** The verification step
   printed "Build completed successfully!" whatever happened. It now asserts the bundle was
-  built, asserts the archive is non-empty, and then runs the packaged artifact exactly as
-  a user would: it must produce a JSON report without the bundle, must fail without one,
-  and must write an HTML report with d3 inlined once the bundle is extracted. This is the
-  check whose absence let the original fix through.
+  built, asserts the archive actually contains `d3.v7.min.js` rather than just being
+  non-empty, and runs the packaged artifact exactly as a user would — two files, bundle
+  extracted, both reports written. This is the check whose absence let the original fix
+  through.
+  - The mirror-image assertion, that the binary *fails* without the bundle, cannot be made
+    in CI: SwiftPM bakes the build machine's absolute path into the binary, so on a runner
+    the bundle is always found and the failure never reproduces. That direction was
+    verified by hand with the build tree removed. The first attempt at this check asserted
+    it anyway and failed the 1.5.1 run.
 - **The bundle is now found beside the executable.** SwiftPM bakes the bundle's absolute
   path into the binary at build time, so a release binary searched only its build machine
   and the downloaded copy was never considered. The documented layout — the bundle in the

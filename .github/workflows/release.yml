@@ -50,12 +50,24 @@ jobs:
             echo "::error::the packaged resource bundle is empty"
             exit 1
           }
+          # Contents, not just size: an archive that carries the directory but not the
+          # vendored d3 would satisfy every other check here.
+          tar -tzf caliper_CaliperCore.bundle.tar.gz | grep -q "d3.v7.min.js" || {
+            echo "::error::the packaged bundle does not contain d3.v7.min.js"
+            tar -tzf caliper_CaliperCore.bundle.tar.gz
+            exit 1
+          }
           ls -la caliper_CaliperCore.bundle.tar.gz
 
       # Runs the packaged artifact the way a user would: two files downloaded, bundle
-      # extracted, report written. This is the check whose absence let the original
+      # extracted, HTML report written. This is the check whose absence let the original
       # release fix through — a directory listed as a release asset is silently skipped,
       # so nothing failed and a broken binary shipped from 1.3.3 onwards.
+      #
+      # The mirror-image check — that it fails *without* the bundle — cannot be made here.
+      # SwiftPM bakes the bundle's absolute build path into the binary, and on a build
+      # machine that path exists, so the binary always finds the bundle regardless. That
+      # was verified by hand with the build tree removed.
       - name: Verify the packaged artifact can generate a report
         run: |
           set -euo pipefail
@@ -71,20 +83,9 @@ jobs:
           cp .build/release/caliper_CaliperCore.bundle.tar.gz "$workdir/"
           cd "$workdir"
 
-          # The bundle is load-bearing: without it the HTML report cannot be written.
-          # Asserting that it fails proves the archive is not an empty placeholder.
-          if ./caliper --ipa-path app.ipa --output-dir out-missing >missing.log 2>&1; then
-            echo "::error::report generation succeeded without the resource bundle"
-            exit 1
-          fi
-          test -s out-missing/report.json || {
-            echo "::error::the JSON report should be written even without the bundle"
-            exit 1
-          }
-
-          # With the bundle extracted, the HTML report must exist with d3 inlined.
           tar -xzf caliper_CaliperCore.bundle.tar.gz
           ./caliper --ipa-path app.ipa --output-dir out
+          test -s out/report.json || { echo "::error::no JSON report produced"; exit 1; }
           test -s out/report.html || { echo "::error::no HTML report produced"; exit 1; }
           grep -q "d3.v7" out/report.html || {
             echo "::error::the HTML report has no d3 inlined"
