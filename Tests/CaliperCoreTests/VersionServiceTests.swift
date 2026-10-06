@@ -7,8 +7,8 @@ struct VersionServiceTests {
 
     private let service = VersionService()
 
-    /// The version assignment must not depend on `Dictionary` iteration order, which
-    /// Swift randomises per process. These tests pin the resolution order.
+    /// `Dictionary` iteration order is randomised per process, so the resolution order
+    /// is what these tests pin.
     @Test("prefers an explicit package mapping")
     func prefersExplicitMapping() throws {
         let modules = ["AdjustSDK": ModuleSize(name: "AdjustSDK")]
@@ -36,9 +36,7 @@ struct VersionServiceTests {
 
     @Test("resolves a partial match deterministically")
     func partialMatchIsDeterministic() {
-        // "OrchardSDK" is a substring of both identities. The longer, more specific
-        // one must win, on every run. Before this was pinned down the code iterated
-        // the dictionary and broke on the first hit, so the answer varied per process.
+        // A substring of both identities; the longer one must win on every run.
         let mapping = [
             "orchard": "1.0.0",
             "orchardsdk": "2.5.0",
@@ -81,8 +79,7 @@ struct PackageMappingServiceTests {
 
     @Test("does not crash on a duplicate module name")
     func duplicateKeysDoNotTrap() {
-        // `Dictionary(uniqueKeysWithValues:)` would trap here. A repeated module name is
-        // a plausible typo, so it must degrade to a warning.
+        // `Dictionary(uniqueKeysWithValues:)` would trap here.
         let mapping = service.buildMappingDictionary(from: [
             PackageNameMapping(moduleName: "A", packageIdentity: "first.pkg"),
             PackageNameMapping(moduleName: "A", packageIdentity: "second.pkg"),

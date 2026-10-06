@@ -1,8 +1,6 @@
 import Foundation
 
-/// Parser for Package.resolved files to extract Swift package version information
 public struct PackageResolvedParser {
-    /// Parse a Package.resolved file and return a mapping of module names to versions
     public func parse(path: String) throws -> [String: String] {
         let url = URL(fileURLWithPath: path)
         
@@ -19,14 +17,9 @@ public struct PackageResolvedParser {
             var versionMapping: [String: String] = [:]
             
             for pin in packageResolved.pins {
-                // Extract the package name from identity
-                // Identity format is typically: "owner.PackageName" or "ext.PackageName"
                 let packageName = extractPackageName(from: pin.identity)
-                
-                // Determine version string
                 let versionString = extractVersionString(from: pin.state)
-                
-                // Store both the full identity and extracted name
+
                 versionMapping[pin.identity] = versionString
                 versionMapping[packageName] = versionString
             }
@@ -40,13 +33,12 @@ public struct PackageResolvedParser {
         }
     }
     
-    /// Extract the package name from the identity (e.g., "ext.firebaseiossdk" -> "firebaseiossdk")
+    /// "ext.firebaseiossdk" -> "firebaseiossdk"
     private func extractPackageName(from identity: String) -> String {
         let components = identity.split(separator: ".")
         return components.count > 1 ? components.dropFirst().joined(separator: ".") : identity
     }
     
-    /// Extract a version string from package state
     private func extractVersionString(from state: PackageState) -> String {
         if let version = state.version {
             return version

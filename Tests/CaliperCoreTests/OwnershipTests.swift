@@ -23,9 +23,7 @@ struct OwnershipEntryTests {
 
     @Test("treats dots in an identifier literally")
     func escapesRegexMetacharacters() {
-        // The bug this guards: `.` interpolated unescaped is "any character", so
-        // "Foundation.tbd" would also match "FoundationXtbd".
-        let entry = OwnershipEntry(identifier: "Foundation.tbd", owner: "Apple")
+let entry = OwnershipEntry(identifier: "Foundation.tbd", owner: "Apple")
         #expect(entry.matches("Foundation.tbd"))
         #expect(!entry.matches("FoundationXtbd"))
     }
@@ -109,8 +107,7 @@ struct OwnershipServiceTests {
         let entry = service.findEntry(for: "LoginFeature", in: parsed)
         #expect(entry?.allOwners == ["Auth"])
 
-        // Order matters: with the generic pattern first it would win instead.
-        let reversed = try entries("""
+let reversed = try entries("""
         - identifier: "*Feature*"
           owner: Generic
         - identifier: "LoginFeature"

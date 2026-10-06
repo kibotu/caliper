@@ -2,15 +2,9 @@ import Foundation
 import Testing
 @testable import CaliperCore
 
-/// A LinkMap excerpt in the exact shape `ld -map` emits: bracketed, zero-padded
-/// object-file indices in the header, and tab-separated symbol lines of
-/// `address<TAB>size<TAB>[N] name`.
-///
-/// The symbols below are real `swiftc` output for a module named `Demo` with two
-/// classes, `Greeter` and `Formatter`. Hand-written mangled names are unreliable —
-/// `swift_demangle` returns a name it cannot parse unchanged, and the parser's
-/// length-prefix fallback then misreads it — so these were lifted from a real
-/// `-map` file rather than written by hand.
+/// Real `swiftc` output for a module `Demo` with two classes. Hand-written mangled
+/// names are unreliable: `swift_demangle` returns one it cannot parse unchanged, and the
+/// length-prefix fallback then misreads it.
 let linkMapFixture = """
 # Path: lib.dylib
 # Arch: arm64
@@ -38,8 +32,6 @@ struct LinkMapParserTests {
             try LinkMapParser().parseDetailed(linkMapPath: $0)
         }
 
-        // Both object files sit under Demo.build, so findModuleName resolves each
-        // to "Demo" and their symbol sizes add up.
         let demo = try #require(details.moduleSizes["Demo"])
         #expect(demo == 520)
     }
@@ -51,8 +43,7 @@ struct LinkMapParserTests {
         }
         let demo = try #require(details.fileDetails["Demo"])
 
-        // greet and the deinit both fold into Greeter (0x17C + 0x30 = 428); the two
-        // Formatter symbols fold into Formatter (0x38 + 0x24 = 92).
+        // greet and the deinit fold into Greeter (0x17C + 0x30 = 428).
         let greeter = try #require(demo["Greeter"])
         let formatter = try #require(demo["Formatter"])
         #expect(greeter == 428)
@@ -104,7 +95,6 @@ struct LinkMapParserTests {
         ) {
             try LinkMapParser().parseDetailed(linkMapPath: $0)
         }
-        // Only the live 0x40 counts; the dead 0x80 is excluded.
         let demo = try #require(details.moduleSizes["Demo"])
         #expect(demo == 0x40)
     }

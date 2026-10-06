@@ -1,6 +1,5 @@
 import Foundation
 
-/// The complete output structure for Caliper reports
 public struct CaliperOutput: Codable {
     public let appInfo: AppInfo?
     public let modules: [String: ModuleSize]

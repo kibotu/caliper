@@ -1,6 +1,5 @@
 import Foundation
 
-/// Utility for reporting progress to stderr
 public enum ProgressReporter {
     public static func success(_ message: String) {
         fputs("✅ \(message)\n", stderr)
