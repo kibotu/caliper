@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mint install kibotu/caliper` wrote a JSON report and then failed the HTML one.**
+  1.5.1 looked the vendored d3 up by appending its file name to the resource bundle's
+  directory. That is correct for the layout a `swift build` produces and for the one the
+  release archive ships, where the resources sit in the bundle's root. Mint produces a real
+  Apple bundle with them under `Contents/Resources`, so the appended path was not there:
+
+  ```
+  ✅ Report saved to: out/report.json
+  📊 Generating HTML report...
+  ❌ Failed to generate HTML report: invalidOutput
+  Error: Failed to generate output
+  ```
+
+  Reproduced against the installed 1.5.1 binary. d3 is now resolved through `Bundle`,
+  which knows where a bundle keeps its resources in either layout, so the two install paths
+  agree without either being special-cased.
+
+  1.5.1 documented this as Mint not shipping the bundle at all. It does ship it — the
+  bundle was found and read, at a path the lookup then ignored — so the note and the README
+  section that repeated it are corrected above rather than left standing.
+- **An empty `caliper_CaliperCore.bundle` beside the executable could shadow the real one.**
+  The bundle search accepted a candidate on `Bundle(url:) != nil`, which Foundation answers
+  for any directory that exists, empty or not — so an empty leftover was taken as the
+  bundle and the search stopped, never reaching a good one. Candidates are now accepted on
+  resolving d3 itself, which is the thing that has to be there.
+- **The release verification could only see the layout its own build produced.** Every check
+  ran against the flat bundle a `swift build` produces, so a lookup that broke the Mint
+  layout passed CI while failing for everyone who installed that way — the same blind spot
+  the previous release fix had, one level up. The workflow now assembles the Apple layout
+  by hand and requires a report from it too. Confirmed to fail with the 1.5.1 binary and to
+  pass with this one.
+
 ## [1.5.1] - 2026-10-06
 
 ### Fixed

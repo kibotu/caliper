@@ -29,6 +29,75 @@ struct HTMLReporterTests {
         #expect(html.contains("d3.select"))
     }
 
+    // MARK: - Vendored d3 lookup
+
+    /// The two shapes the resource bundle reaches a user in, and where each keeps d3.
+    ///
+    /// `swift build` and the release archive leave it in the bundle's root. `mint install`
+    /// produces a real Apple bundle with it under `Contents/Resources`. The lookup has to
+    /// cover both: this repository's own build only ever produces the first, which is why
+    /// a lookup that hardcoded the file's place passed every check here and failed for
+    /// everyone who installed with Mint.
+    private func makeBundle(resources relative: String) throws -> URL {
+        let bundle = FileManager.default.temporaryDirectory
+            .appendingPathComponent("caliper-bundle-\(UUID().uuidString)")
+            .appendingPathComponent("caliper_CaliperCore.bundle")
+        let directory = relative.isEmpty ? bundle : bundle.appendingPathComponent(relative)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Self.d3StandIn.write(
+            to: directory.appendingPathComponent("d3.v7.min.js"),
+            atomically: true,
+            encoding: .utf8
+        )
+        return bundle
+    }
+
+    private func remove(_ bundle: URL) {
+        try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent())
+    }
+
+    private static let d3StandIn = "// d3 stand-in"
+
+    /// A Mint install is a supported install path, so its layout has to resolve. Reading
+    /// d3 through `Bundle` rather than by appending the file name is what makes it do so.
+    @Test("d3 is found in the Apple bundle layout a Mint install produces")
+    func findsD3InMintLayout() throws {
+        let bundle = try makeBundle(resources: "Contents/Resources")
+        defer { remove(bundle) }
+
+        let d3 = try #require(HTMLReporter.d3URL(inBundleAt: bundle))
+        #expect(try String(contentsOf: d3, encoding: .utf8) == Self.d3StandIn)
+    }
+
+    /// The other half of the same promise: the layout this package's own build produces,
+    /// which is the one the release archive ships.
+    @Test("d3 is found in the flat bundle layout a SwiftPM build produces")
+    func findsD3InFlatLayout() throws {
+        let bundle = try makeBundle(resources: "")
+        defer { remove(bundle) }
+
+        let d3 = try #require(HTMLReporter.d3URL(inBundleAt: bundle))
+        #expect(try String(contentsOf: d3, encoding: .utf8) == Self.d3StandIn)
+    }
+
+    /// Foundation hands back a `Bundle` for any directory that exists, empty or not, so a
+    /// candidate test that only asked "is there a bundle here?" was satisfied by an empty
+    /// leftover sitting beside the executable — and then shadowed the real bundle, because
+    /// the search stopped at the first hit. Asking for the file is the test that means
+    /// something.
+    @Test("an empty bundle directory does not pass for one holding d3")
+    func emptyBundleDirectoryIsNotAccepted() throws {
+        let bundle = FileManager.default.temporaryDirectory
+            .appendingPathComponent("caliper-empty-\(UUID().uuidString)")
+            .appendingPathComponent("caliper_CaliperCore.bundle")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer { remove(bundle) }
+
+        // The premise of the test: this is not a hypothetical leniency.
+        #expect(Bundle(url: bundle) != nil)
+        #expect(HTMLReporter.d3URL(inBundleAt: bundle) == nil)
+    }
+
     @Test("embeds the report data")
     func embedsData() throws {
         let html = try html(for: #"{"totalPackageSize":42}"#)

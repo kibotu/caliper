@@ -20,17 +20,15 @@ public struct HTMLReporter {
 
     /// The vendored d3 bundle.
     static func vendoredD3() throws -> String {
-        guard let root = resourceBundleURL() else {
-            throw CaliperError.invalidOutput
-        }
-        let url = root.appendingPathComponent("d3.v7.min.js")
-        guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
+        guard let url = vendoredD3URL(),
+              let contents = try? String(contentsOf: url, encoding: .utf8) else {
             throw CaliperError.invalidOutput
         }
         return contents
     }
 
     private static let bundleName = "caliper_CaliperCore"
+    private static let d3ResourceName = "d3.v7.min"
 
     /// An empty class used only to locate the bundle this code is linked into.
     private final class BundleMarker {}
@@ -46,11 +44,30 @@ public struct HTMLReporter {
         return candidates
     }
 
-    /// The resource bundle's directory, or `nil` when it is not there.
+    /// The vendored d3 inside the bundle at `root`, or `nil` when it is not there.
     ///
-    /// The documented layout is a `caliper_CaliperCore.bundle` directory beside the
-    /// executable, which is what a release download and a `swift build` both produce, so
-    /// that is searched first and `Bundle.module` is only the fallback.
+    /// Asked of `Bundle` rather than reached by appending the file name to the bundle's
+    /// directory, because the ways this package reaches a user disagree about where the
+    /// resources sit. `swift build` and the release archive leave them in the bundle's
+    /// root; `mint install` builds a real Apple bundle and puts them under
+    /// `Contents/Resources`. Appending a name finds the first and misses the second, so
+    /// every Mint install wrote its JSON report and then failed the HTML one with
+    /// `invalidOutput` — a layout a `swift build` on CI never produces, which is why the
+    /// release verification passed while the documented install path did not.
+    static func d3URL(inBundleAt root: URL) -> URL? {
+        Bundle(url: root)?.url(forResource: d3ResourceName, withExtension: "js")
+    }
+
+    /// The vendored d3, from the first candidate bundle that actually holds it.
+    ///
+    /// Resolving the file rather than the directory is what makes the candidate test
+    /// worth anything: `Bundle(url:)` returns a value for any directory that exists, so
+    /// "there is a `caliper_CaliperCore.bundle` over there" would be satisfied by an empty
+    /// leftover shadowing the real one. Asking for d3 is the question that matters.
+    ///
+    /// The documented layout is a `caliper_CaliperCore.bundle` beside the executable,
+    /// which is what a release download and a `mint install` both produce, so that is
+    /// searched first and `Bundle.module` is only the fallback.
     ///
     /// The fallback is not redundant. SwiftPM generates its resource accessor per build
     /// system: the one compiled here bakes the bundle's absolute path in at build time
@@ -60,15 +77,15 @@ public struct HTMLReporter {
     /// when the bundle is genuinely absent keeps the crash to the case where it is
     /// correct, instead of the case where the bundle is present but not where SwiftPM
     /// happened to look.
-    static func resourceBundleURL() -> URL? {
+    static func vendoredD3URL() -> URL? {
         for candidate in candidatesForBundle {
             let url = candidate.appendingPathComponent(bundleName + ".bundle")
-            if Bundle(url: url) != nil { return url }
+            if let d3 = d3URL(inBundleAt: url) { return d3 }
         }
         // `Bundle.module` traps when the bundle is absent, so it must stay last: it
         // resolves the paths these candidates cannot know about — chiefly the one baked
         // in at compile time, which is the only way `swift test` finds the bundle.
-        return Bundle.module.bundleURL
+        return Bundle.module.url(forResource: d3ResourceName, withExtension: "js")
     }
     
     // MARK: - HTML Template
