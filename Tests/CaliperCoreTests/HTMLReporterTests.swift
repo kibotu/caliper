@@ -235,7 +235,13 @@ struct HTMLReporterTests {
     /// its contents are not in the download at all. Uncompressed: the container says
     /// nothing about what it costs, and the renditions are the expanded bytes. Listing
     /// both at once counts the same bytes twice in one ranked chart.
-    @Test("the catalog is the container when compressed and its contents when not")
+    ///
+    /// Neither is a list of files. The compressed row is a container, and it used to be
+    /// labelled with its path — `Payload/…/ProfisBus.bundle/Assets.car` at 58.6 KB says a
+    /// catalog exists and what it cost, which is nothing anyone can act on. It is now one
+    /// row per catalog, named as a container and carrying the asset count, so the figure
+    /// reads as a price for N assets rather than a mystery.
+    @Test("the catalog is one labelled container row when compressed, its contents when not")
     func catalogRepresentationFollowsBasis() throws {
         let module = dualFigureModule()
         // The chart renderer is stubbed: what matters is the rows it is handed.
@@ -248,21 +254,36 @@ struct HTMLReporterTests {
         };
         """
 
-        func rows(basis: String) throws -> String {
-            try runInPage(
-                module: module, basis: basis, lifting: ["renderTopOffenders"],
+        func rows(basis: String) throws -> [[String: Any]] {
+            let json = try runInPage(
+                module: module, basis: basis,
+                lifting: ["renderTopOffenders", "catalogLabel", "catalogAssetCount"],
                 preamble: capture,
                 expression: "(() => { renderTopOffenders(); return captured; })()"
+            )
+            return try #require(
+                try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]]
             )
         }
 
         let compressed = try rows(basis: "downloadSize")
         let uncompressed = try rows(basis: "installSize")
 
-        #expect(compressed.contains("Assets.car"))
-        #expect(!compressed.contains("logo.png"))
-        #expect(uncompressed.contains("logo.png"))
-        #expect(!uncompressed.contains("Assets.car"))
+        // Compressed: one row for the catalog rather than one per file, and named as a
+        // container rather than after a file that cannot be acted on.
+        let catalogs = compressed.filter { $0["catalog"] as? Bool == true }
+        #expect(catalogs.count == 1)
+        #expect(catalogs.first?["name"] as? String == "Alpha catalog")
+        // The path is kept for the tooltip, since the label is not a real filename.
+        #expect((catalogs.first?["path"] as? String)?.hasSuffix("Assets.car") == true)
+        // The count is what makes the row readable.
+        #expect(catalogs.first?["assets"] as? Int == module.assetCatalogFiles.count)
+        // No rendition is listed compressed: its bytes are not in the download at all.
+        #expect(!compressed.contains { ($0["name"] as? String) == "logo.png" })
+
+        // Uncompressed: the contents, and not the container beside them.
+        #expect(uncompressed.contains { ($0["name"] as? String) == "logo.png" })
+        #expect(!uncompressed.contains { $0["catalog"] as? Bool == true })
     }
 
     /// "Other" is a residual against a total in the same unit as the categories. The
