@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-05
+
+### Fixed
+
+- **The compressed `Largest Resources` chart listed `Assets.car` files, which say
+  nothing actionable.** A compiled asset catalog is a container, and the compressed view
+  had to show the container because a catalog's contents are not in the download at all.
+  Labelled with its path, though, `Payload/…/ProfisBus.bundle/Assets.car` at 58.6 KB
+  reports that a catalog exists and what it cost — which is not something anyone can go
+  and do anything about. Each catalog is now one row named for its container
+  (`ProfisBus catalog`) and carrying its asset count, so the figure reads as a price for
+  N assets rather than a mystery. The real path is in the row's tooltip, since the label
+  is a description and not a filename.
+  - The container's extension is dropped from the label because the chart's axis truncates
+    to about twenty characters, and `ProfisBus.bundle asset catalog` loses the one word
+    that says what the row is.
+  - The count is the module's total across all of its catalogs, not a per-catalog count,
+    because `assetCatalogFiles` is a flat dictionary keyed by rendition name. A module
+    with one catalog — the usual shape, since a bundle ships one `Assets.car` — is exact.
+
 ## [1.4.0] - 2026-10-05
 
 ### Added
