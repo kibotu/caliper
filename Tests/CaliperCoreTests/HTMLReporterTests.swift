@@ -155,6 +155,315 @@ struct HTMLReporterTests {
         }
     }
 
+    // MARK: - Multiple owners
+
+    /// `core` owns ProfisCore outright; `ProfisCore` is also shared with `app` and
+    /// `payments`, so it is the case every assertion here turns on.
+    private func multiOwnerModule() throws -> String {
+        let core = ModuleSize(name: "ProfisCore")
+        core.owner = "core"
+        core.additionalOwners = ["app", "payments"]
+        core.`internal` = true
+        core.binaryCompressedSize = 180_000
+        core.proguard = 420_000
+
+        let bus = ModuleSize(name: "ProfisBus")
+        bus.owner = "bus"
+        bus.additionalOwners = ["core"]
+        bus.`internal` = true
+        bus.binaryCompressedSize = 120_000
+        bus.proguard = 300_000
+
+        let unowned = ModuleSize(name: "PaymentsSDK")
+        unowned.owner = "payments"
+        unowned.binaryCompressedSize = 60_000
+        unowned.proguard = 150_000
+
+        let modules = try JSONEncoder().encode([
+            "ProfisCore": core, "ProfisBus": bus, "PaymentsSDK": unowned,
+        ])
+        return try #require(String(data: modules, encoding: .utf8))
+    }
+
+    private func report(withModules json: String) throws -> String {
+        try html(for: #"{"totalPackageSize":4200000,"totalInstallSize":11900000,"modules":\#(json)}"#)
+    }
+
+    /// The primary owner is listed first and never twice, which a hand-written
+    /// ownership file can easily do.
+    @Test("a module's owners are the primary plus its co-owners, de-duplicated")
+    func allOwnersDeduplicates() throws {
+        let html = try report(withModules: multiOwnerModule())
+        let script = try #require(Self.appScript(in: html))
+        let declaration = try Self.declaration(named: "allOwners", in: script)
+
+        func owners(_ module: String) throws -> String {
+            try Self.run("""
+            \(declaration)
+            console.log(JSON.stringify(allOwners(\(module))));
+            """).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        #expect(try owners(#"{"owner":"core","additionalOwners":["app","payments"]}"#)
+            == #"["core","app","payments"]"#)
+        #expect(try owners(#"{"owner":"bus","additionalOwners":["core"]}"#)
+            == #"["bus","core"]"#)
+        // A co-owner list that repeats the primary must not yield it twice, or the team
+        // filter would match on a name the report only ever shows once.
+        #expect(try owners(#"{"owner":"core","additionalOwners":["core","app"]}"#)
+            == #"["core","app"]"#)
+        #expect(try owners("{}") == "[]")
+    }
+
+    /// A shared module has to stay visible to each team that owns it. Filtering on the
+    /// primary alone would hide it from `app` and `payments`, which is exactly the
+    /// question someone filtering by team is asking.
+    @Test("the team filter matches on any owner, not only the first")
+    func teamFilterMatchesAnyOwner() throws {
+        let html = try report(withModules: multiOwnerModule())
+        let script = try #require(Self.appScript(in: html))
+        let declaration = try Self.declaration(named: "moduleMatchesBreakdownFilters", in: script)
+        let helpers = try Self.declarations(["allOwners"], in: script)
+
+        let shared = #"{"name":"ProfisCore","owner":"core","additionalOwners":["app","payments"],"internal":true}"#
+
+        func matches(_ team: String) throws -> Bool {
+            let out = try Self.run("""
+            let breakdownFilters = { internal: true, external: true, owned: true, unowned: true };
+            let breakdownTeamFilter = '\(team)';
+            \(helpers)
+            \(declaration)
+            console.log(moduleMatchesBreakdownFilters(\(shared)));
+            """).trimmingCharacters(in: .whitespacesAndNewlines)
+            return out == "true"
+        }
+
+        #expect(try matches("core"))
+        #expect(try matches("app"))
+        #expect(try matches("payments"))
+        #expect(try matches("bus") == false)
+        #expect(try matches("") == true)
+    }
+
+    /// Every owner is badged, and co-owners are marked so the order reads without a
+    /// second label saying "also". The owner detail cards carry the same badges as plain
+    /// spans, because the team filter does not apply on the Ownership tab and a badge
+    /// that looked clickable there would do nothing when clicked.
+    @Test("every owner is badged, and only the breakdown ones filter")
+    func everyOwnerIsBadged() throws {
+        let html = try report(withModules: multiOwnerModule())
+        let script = try #require(Self.appScript(in: html))
+        let declaration = try Self.declaration(named: "renderOwnerBadges", in: script)
+        let helpers = try Self.declarations(["allOwners"], in: script)
+
+        let module = #"{"owner":"core","additionalOwners":["app","payments"]}"#
+
+        func badges(_ argument: String) throws -> String {
+            try Self.run("""
+            let breakdownTeamFilter = '';
+            const escapeHtml = (text) => text;
+            \(helpers)
+            \(declaration)
+            console.log(renderOwnerBadges(\(argument)));
+            """).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let filtering = try badges(module)
+        let plain = try badges(module + ", false")
+
+        for team in ["core", "app", "payments"] {
+            #expect(filtering.contains(">\(team)</span>"), "missing badge for \(team)")
+        }
+        // Three owners, three badges, and two of them marked as co-owners.
+        #expect(filtering.components(separatedBy: "owner-badge-filter").count - 1 == 3)
+        #expect(filtering.components(separatedBy: " additional").count - 1 == 2)
+        #expect(!plain.contains("owner-badge-filter"))
+        #expect(plain.contains(">payments</span>"))
+    }
+
+    /// The chart and the per-team list answer different questions, so they are built
+    /// differently on purpose: the chart partitions the app by primary owner, the list
+    /// attributes a shared module to every owner in full. Collapsed into one grouping,
+    /// either the chart would double-count or the list would under-report a team.
+    /// ProfisCore's 180 000 download bytes are the number that shows it.
+    @Test("the chart partitions by primary owner while the list counts shared modules for each team")
+    func ownershipGroupingsDifferDeliberately() throws {
+        let json = try multiOwnerModule()
+        let html = try report(withModules: json)
+        let script = try #require(Self.appScript(in: html))
+
+        let helpers = try Self.declarations(
+            ["calculateModuleDownload", "calculateModuleTotal", "allOwners",
+             "summariseOwner", "sortOwners", "prepareOwnershipChartData", "prepareOwnerGroupData"],
+            in: script
+        )
+        let preamble = """
+        const data = { modules: \(json) };
+        const moduleMatchesOwnershipFilters = () => true;
+        """
+
+        func groups(_ function: String) throws -> [String: (size: Int64, count: Int64)] {
+            let out = try Self.run("""
+            \(helpers)
+            \(preamble)
+            console.log(JSON.stringify(\(function)().map(o => ({ name: o.name, size: o.totalDownloadSize, n: o.moduleCount }))));
+            """).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rows = try #require(
+                try JSONSerialization.jsonObject(with: Data(out.utf8)) as? [[String: Any]]
+            )
+            var result: [String: (size: Int64, count: Int64)] = [:]
+            for row in rows {
+                result[try #require(row["name"] as? String)] = (
+                    size: try #require(row["size"] as? Int64),
+                    count: try #require(row["n"] as? Int64)
+                )
+            }
+            return result
+        }
+
+        let chart = try groups("prepareOwnershipChartData")
+        let detail = try groups("prepareOwnerGroupData")
+
+        // The chart: ProfisCore's 180 000 sits with `core` alone, so the bars add up to
+        // the app's 360 000 across its three owners. `app` owns nothing outright, so it
+        // does not appear at all.
+        #expect(chart["core"]?.size == 180_000)
+        #expect(chart["core"]?.count == 1)
+        #expect(chart["bus"]?.size == 120_000)
+        #expect(chart["payments"]?.size == 60_000)
+        #expect(chart["app"] == nil)
+        let chartTotal = try #require(chart.values.reduce(0) { $0 + $1.size })
+        #expect(chartTotal == 360_000)
+
+        // The list: ProfisCore is counted in full for core, app and payments; ProfisBus
+        // for bus and core. Every team is represented, and the totals exceed the app.
+        #expect(detail["core"]?.size == 300_000)      // ProfisCore + ProfisBus
+        #expect(detail["core"]?.count == 2)
+        #expect(detail["app"]?.size == 180_000)        // ProfisCore
+        #expect(detail["payments"]?.size == 240_000)   // ProfisCore + PaymentsSDK
+        #expect(detail["bus"]?.size == 120_000)        // ProfisBus
+        let detailTotal = try #require(detail.values.reduce(0) { $0 + $1.size })
+        #expect(detailTotal == 840_000)
+        // 840 000 against the app's 360 000: the overlap, stated rather than hidden.
+        #expect(detailTotal > chartTotal)
+    }
+
+    /// The team filter's options come from the owners actually present, so a team that
+    /// owns nothing cannot be selected, and a co-owner appears even though it is never
+    /// a module's primary owner.
+    @Test("the team filter offers every team, co-owners included")
+    func teamFilterOptionsIncludeCoOwners() throws {
+        let json = try multiOwnerModule()
+        let html = try report(withModules: json)
+        let script = try #require(Self.appScript(in: html))
+        let declaration = try Self.declaration(named: "collectAllTeams", in: script)
+        let helpers = try Self.declarations(["allOwners"], in: script)
+
+        let out = try Self.run("""
+        const data = { modules: \(json) };
+        \(helpers)
+        \(declaration)
+        console.log(JSON.stringify(collectAllTeams()));
+        """).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let teams = try #require(
+            try JSONSerialization.jsonObject(with: Data(out.utf8)) as? [String]
+        )
+        // `app` is only ever a co-owner, and it is offered.
+        #expect(teams == ["app", "bus", "core", "payments"])
+    }
+
+    /// The chart's bars and the dropdown are built from different arrays now, so a click
+    /// on a bar cannot carry an index across. It resolves the team by name.
+    @Test("a bar click resolves its team by name, not by index")
+    func barClickResolvesByName() throws {
+        let html = try html(for: #"{"modules":{}}"#)
+        let script = try #require(Self.appScript(in: html))
+        let declaration = try Self.declaration(named: "showOwnerDetails", in: script)
+
+        let out = try Self.run("""
+        const ownerGroupData = [
+            { name: 'core', totalDownloadSize: 300000 },
+            { name: 'app', totalDownloadSize: 180000 },
+            { name: 'bus', totalDownloadSize: 120000 }
+        ];
+        let selected = null, rendered = null, scrolled = false;
+        const document = {
+            getElementById: (id) => ({
+                // A select coerces an assigned value to a string, as a browser does.
+                set value(v) { if (id === 'ownerDropdown') selected = String(v); },
+                get value() { return selected; },
+                scrollIntoView: () => { if (id === 'ownerDetailSection') scrolled = true; }
+            })
+        };
+        const renderOwnerDetails = (i) => { rendered = i; };
+        \(declaration)
+        showOwnerDetails('bus');
+        showOwnerDetails('nobody');
+        console.log(JSON.stringify({ selected, rendered, scrolled }));
+        """).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let result = try #require(
+            try JSONSerialization.jsonObject(with: Data(out.utf8)) as? [String: Any]
+        )
+        // 'bus' is last here, so a name lookup and a naive index would differ. The
+        // unknown team must leave the current selection alone rather than blanking it.
+        #expect(result["rendered"] as? Int == 2)
+        #expect(result["selected"] as? String == "2")
+        #expect(result["scrolled"] as? Bool == true)
+    }
+
+    /// `owner.modules` became a list when the grouping was split, because a module can
+    /// appear under several teams and a name-keyed map made that awkward to build. The
+    /// owner detail card was still reading it with `Object.entries`, so every card in
+    /// that section rendered its own array index as the module's name. The grouping tests
+    /// above did not catch it: they check the totals, not the markup.
+    @Test("the owner detail cards name the module, not its index")
+    func ownerDetailNamesModulesNotIndices() throws {
+        let json = try multiOwnerModule()
+        let html = try report(withModules: json)
+        let script = try #require(Self.appScript(in: html))
+        let body = try Self.declaration(named: "renderOwnerDetails", in: script)
+        let helpers = try Self.declarations(
+            ["formatBytes", "calculateModuleDownload", "calculateModuleTotal", "allOwners",
+             "getFileTypeInfo", "renderResourceRow", "compiledCatalogNote", "renderModuleResources",
+             "renderOwnerBadges"],
+            in: script
+        )
+
+        let out = try Self.run("""
+        const data = { modules: \(json) };
+        // The grouping is exercised by its own test; this one is about what the cards
+        // render, so the group is handed over directly.
+        const ownerGroupData = [{ name: 'core', moduleCount: 2, fileCount: 0,
+            totalDownloadSize: 300000, totalInstallSize: 720000,
+            modules: data.modules.ProfisCore ? [data.modules.ProfisCore, data.modules.ProfisBus] : [] }];
+        const escapeHtml = (text) => text;
+        const document = {
+            getElementById: (id) => ({
+                style: {},
+                scrollIntoView: () => {},
+                set innerHTML(v) { globalThis.captured = v; },
+                get innerHTML() { return globalThis.captured || ''; }
+            })
+        };
+        \(helpers)
+        \(body)
+        const index = ownerGroupData.findIndex(o => o.name === 'core');
+        renderOwnerDetails(String(index));
+        console.log(JSON.stringify({
+            names: [...String(globalThis.captured).matchAll(/<div class="module-name-row">\\s*([^<]+)/g)].map(m => m[1].trim())
+        }));
+        """).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let result = try #require(
+            try JSONSerialization.jsonObject(with: Data(out.utf8)) as? [String: Any]
+        )
+        let names = try #require(result["names"] as? [String])
+        #expect(names == ["ProfisCore", "ProfisBus"])
+        #expect(!names.contains("0"))
+    }
+
     // MARK: - Insights size basis
 
     /// A module whose two figures are far apart, so a test can tell which one a chart
