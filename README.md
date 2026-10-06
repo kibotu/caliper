@@ -298,7 +298,9 @@ lists the assets *inside* it rather than listing the `.car` itself. That is what
 **Largest Resources** chart on the Insights tab shows: every file in the bundle that is
 not compiled code — `.strop`, `.json`, `.strings`, images, and each unpacked catalog
 asset — with the `.car` omitted so the container does not appear alongside its own
-contents.
+contents. The chart omits it on both sizes. A compressed reading could justify a
+container row, but a price is not something anyone can act on, and the `.car`'s
+compressed size is on the module panel either way.
 
 In the module panel these are two sections rather than one list, because they are two
 different kinds of thing: **Resources** holds the files that are in the bundle, and
@@ -323,23 +325,21 @@ compression ratio, which is often a factor of three, so which one you are lookin
 changes the answer. A control at the top right of the Insights tab switches between them.
 
 It drives the charts that have both figures — **Largest Modules** and the **App Size
-Treemap** — and it changes how a compiled asset catalog appears in **Largest Resources**,
-which is the one resource with two honest representations.
+Treemap**.
 
-Compressed, a catalog's contents are not in the download at all: the `.car` is a single
-file in the archive, so the container is the only thing there is to show. It appears as
-one row named for its container and carrying its asset count — `ProfisBus catalog`,
-58.6 KB, 42 assets — so the figure reads as a price for those assets rather than a
-mystery. The real path is in the tooltip, since the label is a description rather than a
-filename. Uncompressed, the container says nothing and the renditions are the expanded
-bytes, so the contents are listed individually instead. Showing both at once would count
-the same bytes twice in one chart.
+**Largest Resources** is not one of them, because it has no second figure to switch to.
+The bundle's files are recorded compressed and nothing else, while a catalog asset is
+recorded unpacked and nothing else, so a compressed rendering of that list could only
+tell you what a `.car` cost — which is not a thing anyone can act on.
 
-Three things deliberately do not follow it, and are labelled with their unit instead:
+Four things deliberately do not follow it, and are labelled with their unit instead:
 
 - **Largest Source Files** is uncompressed. Source files are compiled into the binary and
   never exist in the IPA, so there is no compressed figure to switch to — not a gap in
   the report, the bytes do not exist.
+- **Largest Resources** is mixed, and says so in its heading. The files in the bundle are
+  compressed and the catalog renditions are the same bytes expanded, so one ranked list
+  holds both. Its rows' tooltips say which is which.
 - **The Resource Type Breakdown** is compressed. No per-type uncompressed figure is
   recorded, only per-type compressed. Its "Other" wedge is the residual against that
   compressed total, so it is the files no category claims — the `.car` files and the

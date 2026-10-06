@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The compressed `Largest Resources` chart listed `Assets.car` files.** With Download
+  (compressed) selected, each catalog appeared as one row named for its container
+  (`ProfisBus catalog`, 58.6 KB, 42 assets) — 1.4.1's fix for a chart that listed the raw
+  paths. It still says what a catalog cost rather than what to change, and a container
+  row only exists on the reading where the catalog's contents are absent from the download
+  entirely. The chart now lists the assets unpacked from the catalog on both sizes, so the
+  control does not reach it at all: the bundle's files have only a compressed per-file
+  figure and a rendition only an uncompressed one, which is the same trade Largest Source
+  Files makes.
+  - The heading names both units — `bundle files compressed, catalog assets uncompressed` —
+    so a ranked list of the two is not read as one. The rows' tooltips already said which
+    was which.
+  - Nothing is lost by dropping the container: its compressed size heads the Asset Catalog
+    section of its module's panel, and it is still in the Resource Type Breakdown's
+    residual.
+  - `catalogLabel` and `catalogAssetCount` went with it; they only existed to name and
+    count a container row.
+
 ## [1.5.3] - 2026-10-06
 
 ### Changed

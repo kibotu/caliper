@@ -536,9 +536,11 @@ struct HTMLReporterTests {
         #expect(install != download)
     }
 
-    /// Listing both representations counts the same bytes twice in one ranked chart.
-    @Test("the catalog is one labelled container row when compressed, its contents when not")
-    func catalogRepresentationFollowsBasis() throws {
+    /// The `.car` is a bundle, and a bundle says what it cost rather than what to change,
+    /// so it is not a row in either size: the chart shows the files it unpacks into, and
+    /// its compressed size stays where it is a price rather than a rank.
+    @Test("the catalog is listed as its contents in both sizes, never as the .car")
+    func catalogIsNeverListedAsTheContainer() throws {
         let module = dualFigureModule()
         // What matters is the rows the renderer is handed, so it is stubbed.
         let capture = """
@@ -553,7 +555,7 @@ struct HTMLReporterTests {
         func rows(basis: String) throws -> [[String: Any]] {
             let json = try runInPage(
                 module: module, basis: basis,
-                lifting: ["renderTopOffenders", "catalogLabel", "catalogAssetCount"],
+                lifting: ["renderTopOffenders"],
                 preamble: capture,
                 expression: "(() => { renderTopOffenders(); return captured; })()"
             )
@@ -565,16 +567,19 @@ struct HTMLReporterTests {
         let compressed = try rows(basis: "downloadSize")
         let uncompressed = try rows(basis: "installSize")
 
-        // One row per catalog, named as a container rather than after a file.
-        let catalogs = compressed.filter { $0["catalog"] as? Bool == true }
-        #expect(catalogs.count == 1)
-        #expect(catalogs.first?["name"] as? String == "Alpha catalog")
-        #expect((catalogs.first?["path"] as? String)?.hasSuffix("Assets.car") == true)
-        #expect(catalogs.first?["assets"] as? Int == module.assetCatalogFiles.count)
-        #expect(!compressed.contains { ($0["name"] as? String) == "logo.png" })
+        for rows in [compressed, uncompressed] {
+            let names = rows.compactMap { $0["name"] as? String }
+            #expect(names.contains("logo.png"))
+            #expect(!names.contains { $0.hasSuffix(".car") })
+            #expect(!rows.contains { $0["catalog"] as? Bool == true })
+        }
 
-        #expect(uncompressed.contains { ($0["name"] as? String) == "logo.png" })
-        #expect(!uncompressed.contains { $0["catalog"] as? Bool == true })
+        // Nothing in this list moves with the control: the bundle files are compressed in
+        // both readings and a rendition has only its uncompressed figure.
+        let signature: ([[String: Any]]) -> [String] = { rows in
+            rows.map { "\($0["name"] as? String):\($0["size"] as? Int)" }.sorted()
+        }
+        #expect(signature(compressed) == signature(uncompressed))
     }
 
     /// The residual is measured against a compressed total, not the uncompressed install
