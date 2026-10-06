@@ -90,6 +90,27 @@ mint install kibotu/caliper@main
 caliper --ipa-path MyApp.ipa
 ```
 
+> **Mint installs cannot write an HTML report.** The HTML template and the vendored d3
+> live in a resource bundle beside the executable, and Mint installs from release assets
+> without unpacking it. Mint runs produce a JSON report; for HTML, build from source or
+> download a release and extract the bundle yourself. See [Downloading a release](#downloading-a-release).
+
+### Downloading a release
+
+Each release has two assets: `caliper` and `caliper_CaliperCore.bundle.tar.gz`. The bundle
+holds the HTML template and the vendored d3, so the two must sit in the same directory —
+that is where the binary looks for it.
+
+```bash
+# Download both assets into one directory, then:
+tar -xzf caliper_CaliperCore.bundle.tar.gz
+chmod +x caliper
+./caliper --ipa-path MyApp.ipa
+```
+
+Without the bundle, the JSON report is still written and the HTML report cannot be
+produced.
+
 ## Usage
 
 ### Basic IPA Analysis

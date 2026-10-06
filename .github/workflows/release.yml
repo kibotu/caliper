@@ -33,6 +33,65 @@ jobs:
           ls -la .build/release/
           .build/release/caliper --version || echo "Version command not available"
 
+      # The HTML template and the vendored d3 live in this bundle. Without it beside the
+      # binary, report generation dies — and it used to die silently here, because a
+      # release asset cannot be a directory. Every release from 1.3.3 onwards shipped the
+      # executable alone.
+      - name: Package the resource bundle
+        run: |
+          set -euo pipefail
+          cd .build/release
+          test -d caliper_CaliperCore.bundle || {
+            echo "::error::caliper_CaliperCore.bundle was not produced by the build"
+            exit 1
+          }
+          tar -czf caliper_CaliperCore.bundle.tar.gz caliper_CaliperCore.bundle
+          test -s caliper_CaliperCore.bundle.tar.gz || {
+            echo "::error::the packaged resource bundle is empty"
+            exit 1
+          }
+          ls -la caliper_CaliperCore.bundle.tar.gz
+
+      # Runs the packaged artifact the way a user would: two files downloaded, bundle
+      # extracted, report written. This is the check whose absence let the original
+      # release fix through — a directory listed as a release asset is silently skipped,
+      # so nothing failed and a broken binary shipped from 1.3.3 onwards.
+      - name: Verify the packaged artifact can generate a report
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          mkdir -p "$workdir/Payload/App.app"
+          head -c 4096 /dev/urandom > "$workdir/Payload/App.app/App"
+          printf '<?xml version="1.0"?><plist version="1.0"><dict/></plist>' \
+            > "$workdir/Payload/App.app/Info.plist"
+          (cd "$workdir" && zip -qr app.ipa Payload)
+
+          # Exactly what a release download looks like: two files, nothing else.
+          cp .build/release/caliper "$workdir/"
+          cp .build/release/caliper_CaliperCore.bundle.tar.gz "$workdir/"
+          cd "$workdir"
+
+          # The bundle is load-bearing: without it the HTML report cannot be written.
+          # Asserting that it fails proves the archive is not an empty placeholder.
+          if ./caliper --ipa-path app.ipa --output-dir out-missing >missing.log 2>&1; then
+            echo "::error::report generation succeeded without the resource bundle"
+            exit 1
+          fi
+          test -s out-missing/report.json || {
+            echo "::error::the JSON report should be written even without the bundle"
+            exit 1
+          }
+
+          # With the bundle extracted, the HTML report must exist with d3 inlined.
+          tar -xzf caliper_CaliperCore.bundle.tar.gz
+          ./caliper --ipa-path app.ipa --output-dir out
+          test -s out/report.html || { echo "::error::no HTML report produced"; exit 1; }
+          grep -q "d3.v7" out/report.html || {
+            echo "::error::the HTML report has no d3 inlined"
+            exit 1
+          }
+          echo "Packaged artifact verified: $(ls -la out/report.html)"
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -43,27 +102,39 @@ jobs:
           name: Release ${{ steps.version.outputs.VERSION }}
           body: |
             ## Caliper ${{ steps.version.outputs.VERSION }}
-            
+
             ### Installation
-            
-            **Using Mint:**
+
+            Download both assets, then unpack the resource bundle next to the executable.
+            The HTML report template and the vendored d3 live inside it, so `caliper`
+            cannot write an HTML report without it:
+
             ```bash
-            mint install kibotu/caliper@${{ steps.version.outputs.VERSION }}
+            # 1. download `caliper` and `caliper_CaliperCore.bundle.tar.gz`
+            # 2. put both in the same directory
+            tar -xzf caliper_CaliperCore.bundle.tar.gz
+            chmod +x caliper
+            ./caliper --ipa-path MyApp.ipa
             ```
-            
+
+            Keeping them together matters — the bundle is looked up beside the executable.
+            The JSON report is written either way, so a missing bundle shows up as a
+            missing HTML report rather than a crash.
+
             **Manual build:**
             ```bash
             git clone https://github.com/kibotu/caliper.git
             cd caliper
             git checkout ${{ steps.version.outputs.VERSION }}
             swift build -c release
+            .build/release/caliper --ipa-path MyApp.ipa
             ```
-            
+
             ### Changes
             See commit history for details.
           files: |
             .build/release/caliper
-            .build/release/caliper_CaliperCore.bundle
+            .build/release/caliper_CaliperCore.bundle.tar.gz
           draft: false
           prerelease: false
 
